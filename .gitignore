@@ -1,0 +1,7 @@
+t9s
+_out/
+hack/vagrant/.vagrant/
+hack/vagrant/talos-amd64.iso
+hack/vagrant/talosconfig
+hack/vagrant/controlplane.yaml
+hack/vagrant/worker.yaml
