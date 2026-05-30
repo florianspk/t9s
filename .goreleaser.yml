@@ -1,0 +1,74 @@
+version: 2
+project_name: t9s
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: t9s
+    main: ./cmd/main.go
+    binary: t9s
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: t9s
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: florianspk
+    name: t9s
+  draft: false
+  prerelease: auto
+
+brews:
+  - name: t9s
+    repository:
+      owner: florianspk
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/florianspk/t9s"
+    description: "k9s-inspired TUI for managing Talos Linux clusters via talosctl"
+    license: MIT
+    install: |
+      bin.install "t9s"
+    test: |
+      system "#{bin}/t9s --version"
+
+nfpms:
+  - id: t9s
+    package_name: t9s
+    homepage: https://github.com/florianspk/t9s
+    description: k9s-inspired TUI for managing Talos Linux clusters
+    license: MIT
+    maintainer: "Florian <florianspk@gmail.com>"
+    formats:
+      - deb
+      - rpm
+      - apk
