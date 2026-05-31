@@ -23,7 +23,7 @@ builds:
 archives:
   - id: t9s
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
+    formats: [tar.gz]
     files:
       - LICENSE
       - README.md
@@ -53,9 +53,13 @@ brews:
       owner: florianspk
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
     homepage: "https://github.com/florianspk/t9s"
     description: "k9s-inspired TUI for managing Talos Linux clusters via talosctl"
-    license: MIT
+    license: "Non-Commercial Source-Available"
     install: |
       bin.install "t9s"
     test: |
@@ -66,7 +70,7 @@ nfpms:
     package_name: t9s
     homepage: https://github.com/florianspk/t9s
     description: k9s-inspired TUI for managing Talos Linux clusters
-    license: MIT
+    license: "Non-Commercial Source-Available"
     maintainer: "Florian <florianspk@gmail.com>"
     formats:
       - deb

@@ -254,22 +254,30 @@ func (app App) renderNodeList(height int) string {
 		colVer  = 12
 		colK8s  = 10
 	)
-	// NAME expands to fill available width; fixed cols + K8S + separators + STATUS reserve = 70
-	colHost := app.width - 70
-	if colHost < 20 {
-		colHost = 20
+	// K8S column is shown only when the terminal is wide enough.
+	// Fixed overhead with K8S:    cursor(2)+sep×5(10)+IP(16)+ROLE(14)+VER(12)+K8S(10)+"STATUS"(6) = 70
+	// Fixed overhead without K8S: cursor(2)+sep×4(8)+IP(16)+ROLE(14)+VER(12)+"STATUS"(6)          = 58
+	showK8s := app.width >= 90
+	fixedW := 58
+	if showK8s {
+		fixedW = 70
+	}
+	colHost := app.width - fixedW
+	if colHost < 1 {
+		colHost = 1
 	}
 
 	// Column header row
-	hdr := colHeaderStyle.Render(
-		"  " +
-			col("NAME", colHost) + "  " +
-			col("IP", colIP) + "  " +
-			col("ROLE", colRole) + "  " +
-			col("VERSION", colVer) + "  " +
-			col("K8S", colK8s) + "  " +
-			"STATUS",
-	)
+	hdrCols := "  " +
+		col(truncate("NAME", colHost), colHost) + "  " +
+		col("IP", colIP) + "  " +
+		col("ROLE", colRole) + "  " +
+		col("VERSION", colVer) + "  "
+	if showK8s {
+		hdrCols += col("K8S", colK8s) + "  "
+	}
+	hdrCols += "STATUS"
+	hdr := colHeaderStyle.Render(hdrCols)
 
 	var sb strings.Builder
 	sb.WriteString(hdr)
@@ -286,7 +294,6 @@ func (app App) renderNodeList(height int) string {
 		ip   := col(truncate(n.DisplayIP, colIP), colIP)
 		role := col(truncate(n.Role, colRole), colRole)
 		ver  := col(truncate(n.Version, colVer), colVer)
-		k8s  := col(truncate(n.KubeVersion, colK8s), colK8s)
 
 		selected := i == app.nodeCur
 		cursor := "  "
@@ -297,16 +304,23 @@ func (app App) renderNodeList(height int) string {
 		// Apply semantic colors to plain-padded strings
 		roleColored   := colorRole(role)
 		verColored    := dimStyle.Render(ver)
-		k8sColored    := infoStyle.Render(k8s)
 		statusColored := okStyle.Render(n.Status)
 		if selected {
 			roleColored   = role
 			verColored    = ver
-			k8sColored    = k8s
 			statusColored = n.Status
 		}
 
-		row := cursor + host + "  " + ip + "  " + roleColored + "  " + verColored + "  " + k8sColored + "  " + statusColored
+		row := cursor + host + "  " + ip + "  " + roleColored + "  " + verColored + "  "
+		if showK8s {
+			k8s := col(truncate(n.KubeVersion, colK8s), colK8s)
+			k8sColored := infoStyle.Render(k8s)
+			if selected {
+				k8sColored = k8s
+			}
+			row += k8sColored + "  "
+		}
+		row += statusColored
 
 		if selected {
 			sb.WriteString(selectedStyle.Width(app.width).Render(row))

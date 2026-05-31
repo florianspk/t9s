@@ -72,8 +72,12 @@ func parseJSONStream[T any](data []byte) ([]T, error) {
 			break
 		}
 		if err != nil {
-			// skip malformed token, advance past it
-			dec.Token() //nolint:errcheck
+			// Try to advance past the bad token. If Token() also fails the
+			// decoder is stuck (e.g. truly malformed bytes) — stop to avoid
+			// an infinite loop.
+			if _, tokErr := dec.Token(); tokErr != nil {
+				break
+			}
 			continue
 		}
 		results = append(results, item)
@@ -158,14 +162,19 @@ func (c *Client) GetServices(ctx context.Context, node string) ([]Service, error
 	if err != nil {
 		return nil, err
 	}
+	return parseServiceLines(data), nil
+}
+
+// parseServiceLines parses the tabular output of `talosctl services`.
+// Fields: NODE  SERVICE  STATE  HEALTH  [LAST CHANGE  LAST EVENT]
+func parseServiceLines(data []byte) []Service {
 	var services []Service
 	lines := strings.Split(string(data), "\n")
 	for i, line := range lines {
 		if i == 0 || strings.TrimSpace(line) == "" {
-			continue // skip header and empty lines
+			continue // skip header and blank lines
 		}
 		fields := strings.Fields(line)
-		// fields: [NODE, SERVICE, STATE, HEALTH, ...]
 		if len(fields) < 4 {
 			continue
 		}
@@ -175,7 +184,7 @@ func (c *Client) GetServices(ctx context.Context, node string) ([]Service, error
 			Healthy: fields[3],
 		})
 	}
-	return services, nil
+	return services
 }
 
 // --- Extensions ---

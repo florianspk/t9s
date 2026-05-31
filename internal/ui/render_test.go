@@ -52,6 +52,37 @@ func makeContainers(n int) []talos.ContainerInfo {
 	return c
 }
 
+func makeNodes(n int) []talos.Node {
+	nodes := make([]talos.Node, n)
+	for i := range nodes {
+		nodes[i] = talos.Node{
+			Hostname:    fmt.Sprintf("talos-node-%02d.example.internal", i),
+			IP:          fmt.Sprintf("10.0.0.%d", i+1),
+			DisplayIP:   fmt.Sprintf("10.0.0.%d", i+1),
+			Role:        "worker",
+			Version:     "v1.13.3",
+			KubeVersion: "v1.31.0",
+			Status:      "ready",
+		}
+	}
+	if len(nodes) > 0 {
+		nodes[0].Role = "controlplane"
+	}
+	return nodes
+}
+
+func makeServices(n int) []talos.Service {
+	svcs := make([]talos.Service, n)
+	for i := range svcs {
+		svcs[i] = talos.Service{
+			ID:      fmt.Sprintf("service-%02d", i),
+			State:   "Running",
+			Healthy: "OK",
+		}
+	}
+	return svcs
+}
+
 func makeAddresses(n int) []talos.AddressInfo {
 	a := make([]talos.AddressInfo, n)
 	for i := range a {
@@ -286,6 +317,143 @@ func TestRenderLinesCursorAlwaysVisible(t *testing.T) {
 			out := renderLinesCursor(lines, cur, 80, 20)
 			if !strings.Contains(out, "▶") {
 				t.Errorf("▶ not visible at cur=%d", cur)
+			}
+		})
+	}
+}
+
+// ── node list ─────────────────────────────────────────────────────────────────
+
+func TestRenderNodeListNoLineExceedsWidth(t *testing.T) {
+	for _, width := range []int{80, 120, 160, 220} {
+		width := width
+		t.Run(fmt.Sprintf("w%d", width), func(t *testing.T) {
+			app := newTestApp(width, 30)
+			app.nodes = makeNodes(3)
+			out := app.renderNodeList(25)
+			if got := maxLineWidth(out); got > width {
+				t.Errorf("line width %d > terminal width %d", got, width)
+			}
+		})
+	}
+}
+
+func TestRenderNodeListCursorAlwaysVisible(t *testing.T) {
+	for _, cur := range []int{0, 1, 2} {
+		cur := cur
+		t.Run(fmt.Sprintf("cur%d", cur), func(t *testing.T) {
+			app := newTestApp(120, 30)
+			app.nodes = makeNodes(3)
+			app.nodeCur = cur
+			out := app.renderNodeList(25)
+			if !strings.Contains(out, "▶") {
+				t.Errorf("▶ not visible at cur=%d", cur)
+			}
+		})
+	}
+}
+
+func TestRenderNodeListHeightBudget(t *testing.T) {
+	cases := []struct{ n, cur, height int }{
+		{3, 0, 20},
+		{3, 2, 20},
+		{20, 0, 20},
+		{20, 10, 20},
+		{20, 19, 20},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(fmt.Sprintf("n%d_cur%d_h%d", tc.n, tc.cur, tc.height), func(t *testing.T) {
+			app := newTestApp(120, 30)
+			app.nodes = makeNodes(tc.n)
+			app.nodeCur = tc.cur
+			out := app.renderNodeList(tc.height)
+			if got := lineCount(out); got > tc.height {
+				t.Errorf("output %d lines > budget %d", got, tc.height)
+			}
+		})
+	}
+}
+
+// NAME column must be at least 20 chars even on narrow terminals.
+func TestRenderNodeListResponsiveMinColHost(t *testing.T) {
+	for _, width := range []int{60, 80, 120, 200} {
+		width := width
+		t.Run(fmt.Sprintf("w%d", width), func(t *testing.T) {
+			app := newTestApp(width, 20)
+			app.nodes = makeNodes(1)
+			out := app.renderNodeList(15)
+			if got := maxLineWidth(out); got > width {
+				t.Errorf("line width %d > terminal width %d", got, width)
+			}
+		})
+	}
+}
+
+// K8S version column must appear and not overflow.
+func TestRenderNodeListK8sVersionColumn(t *testing.T) {
+	app := newTestApp(160, 20)
+	app.nodes = makeNodes(2)
+	out := app.renderNodeList(15)
+	if !strings.Contains(out, "K8S") {
+		t.Error("K8S column header not found")
+	}
+	if !strings.Contains(out, "v1.31.0") {
+		t.Error("K8S version v1.31.0 not displayed")
+	}
+	if got := maxLineWidth(out); got > 160 {
+		t.Errorf("line width %d > terminal width 160", got)
+	}
+}
+
+// ── services ──────────────────────────────────────────────────────────────────
+
+func TestRenderServicesCursorAlwaysVisible(t *testing.T) {
+	nodes := makeNodes(1)
+	for _, cur := range []int{0, 3, 6} {
+		cur := cur
+		t.Run(fmt.Sprintf("cur%d", cur), func(t *testing.T) {
+			app := newTestApp(120, 25)
+			app.services = makeServices(7)
+			app.svcCur = cur
+			app.selNode = &nodes[0]
+			out := app.renderServices(20)
+			if !strings.Contains(out, "▶") {
+				t.Errorf("▶ not visible at cur=%d", cur)
+			}
+		})
+	}
+}
+
+func TestRenderServicesHeightBudget(t *testing.T) {
+	nodes := makeNodes(1)
+	for _, cur := range []int{0, 3, 6} {
+		cur := cur
+		t.Run(fmt.Sprintf("cur%d", cur), func(t *testing.T) {
+			app := newTestApp(120, 25)
+			app.services = makeServices(7)
+			app.svcCur = cur
+			app.selNode = &nodes[0]
+			const h = 20
+			out := app.renderServices(h)
+			if got := lineCount(out); got > h {
+				t.Errorf("output %d lines > budget %d", got, h)
+			}
+		})
+	}
+}
+
+func TestRenderServicesNoLineExceedsWidth(t *testing.T) {
+	nodes := makeNodes(1)
+	for _, width := range []int{80, 120, 200} {
+		width := width
+		t.Run(fmt.Sprintf("w%d", width), func(t *testing.T) {
+			app := newTestApp(width, 25)
+			app.services = makeServices(7)
+			app.selNode = &nodes[0]
+			out := app.renderServices(20)
+			if got := maxLineWidth(out); got > width {
+				t.Errorf("line width %d > terminal width %d", got, width)
 			}
 		})
 	}
