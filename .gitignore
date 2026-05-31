@@ -19,14 +19,6 @@ worker.yaml
 kubeconfig
 *.kubeconfig
 
-# Vagrant
-hack/vagrant/.vagrant/
-hack/vagrant/talos-amd64.iso
-hack/vagrant/talosconfig
-hack/vagrant/controlplane.yaml
-hack/vagrant/worker.yaml
-hack/vagrant/*.vmdk
-
 # IDEs
 .idea/
 .vscode/
