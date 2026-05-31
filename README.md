@@ -1,12 +1,38 @@
+<img src="assets/logo.png" alt="t9s" width="200"/>
+
 # t9s — TUI for Talos Linux
 
-A terminal UI for managing Talos Linux clusters, inspired by k9s. Built with Go + [bubbletea](https://github.com/charmbracelet/bubbletea).
+A terminal UI for managing Talos Linux clusters, inspired by k9s.
+Built with Go, [bubbletea](https://github.com/charmbracelet/bubbletea) and [lipgloss](https://github.com/charmbracelet/lipgloss).
+
+---
+
+## Features
+
+- **Full-screen responsive layout** — adapts to any terminal size, columns expand with the window
+- **Node list** with Talos version, Kubernetes version, role and status
+- **Services, Logs, Dmesg** — live streaming with interactive ▶ cursor
+- **Disks, Processes, Containers, Addresses** — per-node resource views
+- **Metrics** — CPU/RAM stats with delta (auto-refreshes every 5s)
+- **Machine config** — read-only YAML viewer
+- **Extensions** — installed list + catalog browser (requires `crane`)
+- **Upgrades** — Talos and Kubernetes with version pre-fill and `--preserve` toggle
+- **Health** — cluster health streaming
+- **Multi-context** — switch talosconfig context at runtime (`x`)
+- **Search** — real-time filter in list views (`/`)
+- **Wrap mode** — toggle line wrapping for wide content (`w`)
+- **Version check** — warns when talosctl client/server versions diverge
+
+---
 
 ## Requirements
 
 - Go 1.22+
-- `talosctl` installed and in `$PATH`
+- `talosctl` in `$PATH` — version should match your cluster
 - A valid talosconfig (`~/.talos/config` or `$TALOSCONFIG`)
+- `crane` in `$PATH` — only required for the extension catalog view
+
+---
 
 ## Installation
 
@@ -17,22 +43,15 @@ go build -o t9s ./cmd/main.go
 sudo mv t9s /usr/local/bin/
 ```
 
-Or run directly:
-
-```bash
-go run ./cmd/main.go
-```
+---
 
 ## Usage
 
-```bash
-t9s [flags]
-
-Flags:
-  --talosconfig <path>   Path to talosconfig (default: $TALOSCONFIG or ~/.talos/config)
-  --context <name>       Talos context to use (default: active context in talosconfig)
-  --version              Print version and exit
 ```
+t9s [--talosconfig <path>] [--context <name>] [--version]
+```
+
+---
 
 ## Keybindings
 
@@ -40,121 +59,129 @@ Flags:
 
 | Key | Action |
 |-----|--------|
-| `?` | Toggle help overlay |
-| `x` | Switch talos context (multi-cluster) |
+| `?` | Help overlay |
+| `/` | Search / filter |
+| `w` | Toggle wrap mode |
+| `x` | Switch talos context |
 | `Ctrl+C` | Quit |
 
-### Node List (default view)
+### Node List
 
 | Key | Action |
 |-----|--------|
-| `↑` / `k` | Move cursor up |
-| `↓` / `j` | Move cursor down |
-| `Enter` / `s` | Open services for selected node |
-| `e` | Open extensions for selected node |
-| `m` | View machine config for selected node |
-| `d` | Stream dmesg (kernel logs) for selected node |
-| `t` | View container metrics/stats for selected node |
-| `U` | Upgrade Talos on selected node |
-| `K` | Upgrade Kubernetes (from selected controlplane) |
-| `r` | Force refresh node list |
-| `q` | Quit |
+| `↑↓` / `jk` | Navigate |
+| `Enter` / `s` | Services |
+| `e` | Extensions |
+| `C` | Extension catalog |
+| `m` | Machine config |
+| `d` | Dmesg |
+| `t` | Metrics |
+| `p` | Processes |
+| `c` | Containers |
+| `a` | Network addresses |
+| `i` | Disks |
+| `H` | Cluster health |
+| `U` | Upgrade Talos |
+| `K` | Upgrade Kubernetes |
+| `R` / `S` | Reboot / Shutdown node |
+| `r` | Refresh |
 
-### Services
-
-| Key | Action |
-|-----|--------|
-| `↑` / `k` | Move cursor up |
-| `↓` / `j` | Move cursor down |
-| `Enter` / `l` | Stream logs for selected service |
-| `Esc` / `q` | Back to node list |
-
-### Logs / Dmesg
+### Logs / Dmesg / Health
 
 | Key | Action |
 |-----|--------|
-| `↑` / `k` | Scroll up |
-| `↓` / `j` | Scroll down |
-| `g` | Jump to top |
-| `G` | Jump to bottom |
-| `Esc` / `q` | Stop streaming, go back |
+| `↑↓` | Move cursor |
+| `PgUp` / `PgDn` | Half-page scroll |
+| `g` / `G` | Top / bottom |
+| `Esc` / `q` | Back |
 
-### Machine Config / Extensions / Metrics
-
-| Key | Action |
-|-----|--------|
-| `↑` / `↓` | Navigate / scroll |
-| `Esc` / `q` | Back to node list |
-
-### Upgrade Talos / Upgrade Kubernetes
+### Upgrade
 
 | Key | Action |
 |-----|--------|
-| type | Enter image or version |
-| `Enter` | Proceed to confirmation |
-| `y` | Confirm and start upgrade |
-| `n` / `Esc` | Cancel |
-| `Esc` | Abort running upgrade |
+| type | Enter image or version (pre-filled with current) |
+| `p` | Toggle `--preserve` (default on — required for single-node etcd) |
+| `Enter` | Confirm |
+| `y` / `n` | Confirm / cancel |
+| `Esc` | Back (upgrade keeps running in background) |
 
-### Context Switcher
-
-| Key | Action |
-|-----|--------|
-| `↑` / `↓` | Navigate contexts |
-| `Enter` | Switch to selected context |
-| `Esc` / `q` | Cancel |
+---
 
 ## Views
 
-| View | What it shows | Underlying command |
-|------|---------------|--------------------|
-| Nodes | All cluster members | `talosctl get members` |
-| Services | Services on selected node | `talosctl get servicestatuses -n <node>` |
-| Logs | Live log stream | `talosctl logs -n <node> -f <service>` |
-| Machine Config | Active machine config YAML | `talosctl get machineconfig -n <node> -o yaml` |
-| Extensions | Installed extensions | `talosctl get extensions -n <node>` |
-| Dmesg | Kernel log stream | `talosctl dmesg -n <node> -f` |
-| Metrics | Container CPU/memory stats | `talosctl stats -n <node>` |
-| Upgrade Talos | Upgrade Talos on a node | `talosctl upgrade -n <node> --image <image>` |
-| Upgrade K8s | Upgrade Kubernetes | `talosctl upgrade-k8s --to <version>` |
+| View | Key | What it shows |
+|------|-----|---------------|
+| Nodes | default | Members — Talos + K8s version, role, status |
+| Services | `s` | Service state and health |
+| Logs | `l` | Live service log stream |
+| Dmesg | `d` | Live kernel log stream |
+| Machine Config | `m` | Machine config YAML |
+| Extensions | `e` | Installed Talos extensions |
+| Ext. Catalog | `C` | Available extensions from Siderolabs registry |
+| Metrics | `t` | CPU/RAM per container with delta |
+| Processes | `p` | Running processes sorted by memory |
+| Containers | `c` | containerd containers (system + k8s namespaces) |
+| Addresses | `a` | Network interfaces and addresses |
+| Disks | `i` | Block devices — model, serial, type, size |
+| Health | `H` | Cluster health checks (streaming) |
+| Upgrade Talos | `U` | Upgrade Talos with pre-filled installer image |
+| Upgrade K8s | `K` | Upgrade Kubernetes with pre-filled version |
 
-## Auto-refresh
-
-- Node list and metrics refresh every **5 seconds** automatically.
-- Log and dmesg streams are live (`-f` flag).
-- All other views are loaded once; press `r` from the node list to refresh.
+---
 
 ## Architecture
 
 ```
 t9s/
-├── cmd/main.go              # Entry point (CLI flags, program setup)
+├── cmd/main.go               # Entry point, CLI flags, bubbletea setup
 ├── internal/
-│   ├── config/config.go     # Talosconfig loading
+│   ├── config/config.go      # Talosconfig loader
 │   ├── talos/
-│   │   ├── types.go         # Data types (Node, Service, Extension…)
-│   │   └── client.go        # talosctl subprocess wrappers
+│   │   ├── types.go          # Data types (Node, Service, DiskInfo…)
+│   │   └── client.go         # talosctl subprocess wrappers
 │   └── ui/
-│       ├── app.go           # Main bubbletea model + lifecycle
-│       ├── styles.go        # Lipgloss style definitions
-│       ├── messages.go      # tea.Msg types
-│       ├── keyrouter.go     # Keyboard routing
-│       ├── nodelist.go      # Node list view
-│       ├── services.go      # Services view
-│       ├── logs.go          # Log streaming view
-│       ├── machineconfig.go # Machine config view
-│       ├── extensions.go    # Extensions view
-│       ├── dmesg.go         # Dmesg streaming view
-│       ├── metrics.go       # Metrics view
-│       ├── upgrade.go       # Upgrade Talos/K8s view
-│       └── contexts.go      # Context switcher view
+│       ├── app.go            # bubbletea Model: Init / Update / View
+│       ├── styles.go         # Lipgloss palette and styles
+│       ├── messages.go       # tea.Msg types
+│       ├── keyrouter.go      # Global key dispatch
+│       ├── hints.go          # Context-sensitive hint bar
+│       └── <view>.go         # One file per view
+├── hack/vagrant/             # VirtualBox test cluster
+├── assets/                   # Logo and visual assets
 ├── go.mod
-└── README.md
+└── LICENSE
 ```
 
-## Talos API Notes
+**Design notes:**
+- Uses `talosctl` as a subprocess — no gRPC dependency, inherits authentication automatically
+- Responsive column widths computed from `app.width` at render time
+- Backward line-counting guarantees the cursor is always visible in wrap mode
+- Goroutine + channel streaming with context cancellation — no goroutine leaks
 
-- Uses `talosctl` subprocesses (not the machinery gRPC library) for simplicity and reliability.
-- All JSON parsing uses ndjson output from `talosctl get ... -o json`.
-- Streaming (logs, dmesg) uses goroutines with context cancellation — no goroutine leaks.
-- Supports HA controlplane (multiple endpoints defined in talosconfig).
+---
+
+## Local test cluster (upgrades)
+
+```bash
+# Download Talos assets
+mkdir -p _out
+curl -L https://github.com/siderolabs/talos/releases/download/v1.7.0/vmlinuz-amd64 -o _out/vmlinuz-amd64
+curl -L https://github.com/siderolabs/talos/releases/download/v1.7.0/initramfs-amd64.xz -o _out/initramfs-amd64.xz
+
+# Create QEMU cluster (requires root for CNI bridge)
+sudo -E env TALOSCONFIG=~/.talos/t9s-dev.yaml talosctl cluster create \
+  --provisioner qemu --name t9s-dev --controlplanes 1 --workers 1 \
+  --vmlinuz-path _out/vmlinuz-amd64 --initrd-path _out/initramfs-amd64.xz \
+  --talosconfig ~/.talos/t9s-dev.yaml --skip-kubeconfig
+
+t9s --talosconfig ~/.talos/t9s-dev.yaml
+```
+
+A VirtualBox alternative is in [`hack/vagrant/`](hack/vagrant/).
+
+---
+
+## License
+
+[Non-Commercial Source-Available License](LICENSE) — free for personal and open-source use.  
+Commercial use is prohibited. All modifications must be contributed back to this repository.

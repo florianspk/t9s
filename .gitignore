@@ -1,7 +1,39 @@
+# Build output
 t9s
+t9s.exe
+dist/
 _out/
+
+# Go
+*.test
+*.prof
+vendor/
+
+# Sensitive — talosconfig files contain private keys and certificates.
+# Never commit cluster credentials.
+*.talosconfig
+talosconfig
+talosconfig.yaml
+controlplane.yaml
+worker.yaml
+kubeconfig
+*.kubeconfig
+
+# Vagrant
 hack/vagrant/.vagrant/
 hack/vagrant/talos-amd64.iso
 hack/vagrant/talosconfig
 hack/vagrant/controlplane.yaml
 hack/vagrant/worker.yaml
+hack/vagrant/*.vmdk
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

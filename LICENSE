@@ -1,0 +1,44 @@
+t9s — Non-Commercial Source-Available License
+Copyright (c) 2026 Florian Specker (florianspk)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, modify, and distribute the Software, subject to the following conditions:
+
+1. NON-COMMERCIAL USE ONLY
+   The Software may not be used, in whole or in part, for any commercial
+   purpose. A "commercial purpose" means any activity primarily intended for
+   or directed toward commercial advantage or monetary compensation, including
+   but not limited to: selling, licensing, or incorporating the Software into
+   a paid product or service, using the Software to provide services to third
+   parties for compensation, or using the Software within an organization for
+   internal business operations that generate revenue.
+
+2. SHARE-ALIKE (CONTRIBUTION BACK)
+   Any modified version of the Software, or any software that incorporates
+   a substantial portion of the Software, must be:
+   (a) made publicly available under the same terms as this License, and
+   (b) contributed back to the original project by submitting a pull request
+       to the canonical repository at https://github.com/florianspk/t9s
+       within 90 days of distribution or deployment of the modified version.
+
+3. ATTRIBUTION
+   All copies or substantial portions of the Software must include this
+   License and the following attribution notice:
+   "Based on t9s by Florian Specker — https://github.com/florianspk/t9s"
+
+4. NO SUBLICENSING
+   You may not sublicense the Software under different terms. Any recipient
+   of the Software automatically receives the same rights and obligations
+   described in this License.
+
+5. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+For commercial licensing inquiries, contact: florianspk@gmail.com
