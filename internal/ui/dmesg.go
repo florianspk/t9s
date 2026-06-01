@@ -25,6 +25,21 @@ func (app App) handleDmesgKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	}
 
 	n := len(app.dmesgLines)
+	dmesgFindBarH := 0
+	if app.findActive || app.findQuery != "" {
+		dmesgFindBarH = 1
+	}
+	dmesgMaxRows := max(1, app.mainHeight()-2-dmesgFindBarH)
+	approxDmesgAnchor := max(0, n-dmesgMaxRows)
+
+	updateDmesgScroll := func() {
+		if app.dmesgCur >= approxDmesgAnchor {
+			app.viewScrollStart = approxDmesgAnchor
+		} else {
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.dmesgCur, n, dmesgMaxRows)
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
@@ -41,18 +56,24 @@ func (app App) handleDmesgKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		if app.dmesgCur > 0 {
 			app.dmesgCur--
 		}
+		updateDmesgScroll()
 	case "down", "j":
 		if app.dmesgCur < n-1 {
 			app.dmesgCur++
 		}
+		updateDmesgScroll()
 	case "pgup":
 		app.dmesgCur = max(0, app.dmesgCur-app.mainHeight()/2)
+		updateDmesgScroll()
 	case "pgdown":
 		app.dmesgCur = min(max(0, n-1), app.dmesgCur+app.mainHeight()/2)
+		updateDmesgScroll()
 	case "g":
 		app.dmesgCur = 0
+		updateDmesgScroll()
 	case "G":
 		app.dmesgCur = max(0, n-1)
+		updateDmesgScroll()
 	case "/":
 		app.findActive = true
 		app.findInput.SetValue("")
@@ -95,6 +116,6 @@ func (app App) renderDmesg(height int) string {
 	if app.findActive || app.findQuery != "" {
 		findBarH = 1
 	}
-	content := renderLinesCursor(app.dmesgLines, app.dmesgCur, app.width, height-2-findBarH, app.findQuery)
+	content := renderLinesCursor(app.dmesgLines, app.dmesgCur, app.width, height-2-findBarH, app.viewScrollStart, app.findQuery)
 	return title + content + app.renderFindBar(app.dmesgLines)
 }

@@ -179,6 +179,11 @@ type App struct {
 	// Generic scroll offset for simple list views (disks, processes, addresses)
 	listScroll int
 
+	// viewScrollStart is the index of the first visible item in the current
+	// list view. Updated by key handlers so the window only scrolls when the
+	// cursor hits a boundary (not centred on every key press).
+	viewScrollStart int
+
 	// Wrap mode: long lines wrap instead of being truncated
 	wrapMode bool
 
@@ -1142,6 +1147,29 @@ func computeScrollStart(cur, total, maxRows int) int {
 	return start
 }
 
+// clampScrollStart adjusts prevStart so that cur stays within the visible
+// window [prevStart, prevStart+maxRows). The window only shifts when the
+// cursor hits a boundary — it stays still while the cursor moves freely
+// inside the visible area.
+func clampScrollStart(prevStart, cur, total, maxRows int) int {
+	if total <= maxRows {
+		return 0
+	}
+	start := prevStart
+	if cur >= start+maxRows {
+		start = cur - maxRows + 1
+	} else if cur < start {
+		start = cur
+	}
+	if start > total-maxRows {
+		start = total - maxRows
+	}
+	if start < 0 {
+		start = 0
+	}
+	return start
+}
+
 // col pads plain ASCII text to exactly w chars (must be called before colorising).
 func col(s string, w int) string {
 	l := len(s)
@@ -1187,6 +1215,7 @@ func (app App) goTo(state AppState) App {
 	app.searchActive = false
 	app.searchInput.Reset()
 	app.listScroll = 0
+	app.viewScrollStart = 0
 	return app
 }
 

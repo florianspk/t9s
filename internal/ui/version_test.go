@@ -83,7 +83,6 @@ func TestCheckVersionMismatchNoPrefixV(t *testing.T) {
 // ── computeScrollStart ────────────────────────────────────────────────────────
 
 func TestComputeScrollStartFitsAll(t *testing.T) {
-	// When all items fit, start is always 0.
 	for cur := 0; cur < 5; cur++ {
 		if got := computeScrollStart(cur, 5, 10); got != 0 {
 			t.Errorf("cur=%d: all fit, want start=0, got %d", cur, got)
@@ -99,18 +98,13 @@ func TestComputeScrollStartCursorAtStart(t *testing.T) {
 
 func TestComputeScrollStartCursorAtEnd(t *testing.T) {
 	got := computeScrollStart(99, 100, 10)
-	if got > 90 {
-		t.Errorf("cursor at end: start should be ≤90, got %d", got)
-	}
-	if got < 0 {
-		t.Errorf("start must not be negative, got %d", got)
+	if got > 90 || got < 0 {
+		t.Errorf("cursor at end: want start in [0,90], got %d", got)
 	}
 }
 
 func TestComputeScrollStartCursorCentered(t *testing.T) {
-	// Cursor in the middle should produce a start that puts it near center.
 	got := computeScrollStart(50, 100, 10)
-	// cursor should be visible: start ≤ 50 < start+10
 	if got > 50 || got+10 <= 50 {
 		t.Errorf("cursor 50 not visible: start=%d, window=[%d,%d)", got, got, got+10)
 	}
@@ -128,6 +122,60 @@ func TestComputeScrollStartNeverExceedsBound(t *testing.T) {
 	total, maxRows := 20, 10
 	for cur := 0; cur < total; cur++ {
 		got := computeScrollStart(cur, total, maxRows)
+		if got+maxRows > total {
+			t.Errorf("cur=%d: start=%d overflows total=%d with window=%d", cur, got, total, maxRows)
+		}
+	}
+}
+
+// ── clampScrollStart ──────────────────────────────────────────────────────────
+
+func TestClampScrollStartFitsAll(t *testing.T) {
+	// When all items fit, always 0 regardless of prevStart.
+	for cur := 0; cur < 5; cur++ {
+		if got := clampScrollStart(0, cur, 5, 10); got != 0 {
+			t.Errorf("cur=%d: all fit, want 0, got %d", cur, got)
+		}
+	}
+}
+
+func TestClampScrollStartWindowStaysStill(t *testing.T) {
+	// Cursor within the window — window must not move.
+	for cur := 0; cur < 10; cur++ {
+		if got := clampScrollStart(0, cur, 50, 10); got != 0 {
+			t.Errorf("cur=%d within [0,10): window should stay at 0, got %d", cur, got)
+		}
+	}
+}
+
+func TestClampScrollStartScrollsDownAtBoundary(t *testing.T) {
+	// Cursor hits the bottom boundary — window scrolls down.
+	got := clampScrollStart(0, 10, 50, 10)
+	if got != 1 {
+		t.Errorf("cursor at 10 (just past bottom of [0,10)): want start=1, got %d", got)
+	}
+}
+
+func TestClampScrollStartScrollsUpAtBoundary(t *testing.T) {
+	// Cursor goes above the window — window scrolls up.
+	got := clampScrollStart(5, 3, 50, 10)
+	if got != 3 {
+		t.Errorf("cursor at 3 (above window starting at 5): want start=3, got %d", got)
+	}
+}
+
+func TestClampScrollStartNeverNegative(t *testing.T) {
+	for cur := 0; cur < 20; cur++ {
+		if got := clampScrollStart(0, cur, 20, 10); got < 0 {
+			t.Errorf("cur=%d: got negative start %d", cur, got)
+		}
+	}
+}
+
+func TestClampScrollStartNeverExceedsBound(t *testing.T) {
+	total, maxRows := 20, 10
+	for cur := 0; cur < total; cur++ {
+		got := clampScrollStart(0, cur, total, maxRows)
 		if got+maxRows > total {
 			t.Errorf("cur=%d: start=%d overflows total=%d with window=%d", cur, got, total, maxRows)
 		}

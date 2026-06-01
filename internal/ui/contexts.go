@@ -17,11 +17,13 @@ func (app App) handleContextsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.ctxCur > 0 {
 			app.ctxCur--
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.ctxCur, len(app.filteredContexts()), app.mainHeight()-3)
 		}
 
 	case "down", "j":
 		if app.ctxCur < len(app.filteredContexts())-1 {
 			app.ctxCur++
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.ctxCur, len(app.filteredContexts()), app.mainHeight()-3)
 		}
 
 	case "enter":
@@ -75,10 +77,7 @@ func (app App) renderContextSwitcher(height int) string {
 	sb.WriteString(header)
 	sb.WriteByte('\n')
 
-	start := 0
-	if app.ctxCur >= height-3 {
-		start = app.ctxCur - (height - 4)
-	}
+	start := clampScrollStart(app.viewScrollStart, app.ctxCur, len(ctxs), height-3)
 
 	for i := start; i < len(ctxs) && i-start < height-3; i++ {
 		c := ctxs[i]

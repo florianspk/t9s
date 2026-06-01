@@ -17,11 +17,13 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.nodeCur > 0 {
 			app.nodeCur--
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.nodeCur, len(app.filteredNodes()), app.mainHeight()-2)
 		}
 
 	case "down", "j":
 		if app.nodeCur < len(app.filteredNodes())-1 {
 			app.nodeCur++
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.nodeCur, len(app.filteredNodes()), app.mainHeight()-2)
 		}
 
 	case "enter", "s":
@@ -285,7 +287,7 @@ func (app App) renderNodeList(height int) string {
 	sb.WriteByte('\n')
 
 	maxRows := height - 2
-	start := computeScrollStart(app.nodeCur, len(nodes), maxRows)
+	start := clampScrollStart(app.viewScrollStart, app.nodeCur, len(nodes), maxRows)
 
 	for i := start; i < len(nodes) && i < start+maxRows; i++ {
 		n := nodes[i]

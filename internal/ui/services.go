@@ -18,11 +18,13 @@ func (app App) handleServicesKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.svcCur > 0 {
 			app.svcCur--
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.svcCur, len(app.filteredServices()), app.mainHeight()-3)
 		}
 
 	case "down", "j":
 		if app.svcCur < len(app.filteredServices())-1 {
 			app.svcCur++
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.svcCur, len(app.filteredServices()), app.mainHeight()-3)
 		}
 
 	case "enter", "l":
@@ -94,7 +96,7 @@ func (app App) renderServices(height int) string {
 	sb.WriteByte('\n')
 
 	maxRows := height - 3
-	start := computeScrollStart(app.svcCur, len(svcs), maxRows)
+	start := clampScrollStart(app.viewScrollStart, app.svcCur, len(svcs), maxRows)
 
 	for i := start; i < len(svcs) && i < start+maxRows; i++ {
 		s := svcs[i]

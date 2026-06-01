@@ -17,11 +17,13 @@ func (app App) handleExtCatalogKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.catalogCur > 0 {
 			app.catalogCur--
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.catalogCur, len(app.filteredCatalog()), app.mainHeight()-4)
 		}
 
 	case "down", "j":
 		if app.catalogCur < len(app.filteredCatalog())-1 {
 			app.catalogCur++
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.catalogCur, len(app.filteredCatalog()), app.mainHeight()-4)
 		}
 
 	case "esc", "q":
@@ -68,10 +70,7 @@ func (app App) renderExtCatalog(height int) string {
 	sb.WriteString(hdr)
 	sb.WriteByte('\n')
 
-	start := 0
-	if app.catalogCur >= listH {
-		start = app.catalogCur - listH + 1
-	}
+	start := clampScrollStart(app.viewScrollStart, app.catalogCur, len(catalog), listH)
 
 	for i := start; i < len(catalog) && i-start < listH; i++ {
 		e := catalog[i]

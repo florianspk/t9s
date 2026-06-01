@@ -10,6 +10,17 @@ import (
 
 func (app App) handleHealthKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	n := len(app.healthLines)
+	healthMaxRows := max(1, app.mainHeight()-2)
+	approxHealthAnchor := max(0, n-healthMaxRows)
+
+	updateHealthScroll := func() {
+		if app.healthCur >= approxHealthAnchor {
+			app.viewScrollStart = approxHealthAnchor
+		} else {
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.healthCur, n, healthMaxRows)
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
@@ -21,18 +32,24 @@ func (app App) handleHealthKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		if app.healthCur > 0 {
 			app.healthCur--
 		}
+		updateHealthScroll()
 	case "down", "j":
 		if app.healthCur < n-1 {
 			app.healthCur++
 		}
+		updateHealthScroll()
 	case "pgup":
 		app.healthCur = max(0, app.healthCur-app.mainHeight()/2)
+		updateHealthScroll()
 	case "pgdown":
 		app.healthCur = min(max(0, n-1), app.healthCur+app.mainHeight()/2)
+		updateHealthScroll()
 	case "g":
 		app.healthCur = 0
+		updateHealthScroll()
 	case "G":
 		app.healthCur = max(0, n-1)
+		updateHealthScroll()
 	}
 	return app, nil
 }
@@ -45,7 +62,7 @@ func (app App) renderHealth(height int) string {
 			infoStyle.Render("Running health check…"))
 	}
 
-	return title + renderLinesCursor(app.healthLines, app.healthCur, app.width, height-2, "")
+	return title + renderLinesCursor(app.healthLines, app.healthCur, app.width, height-2, app.viewScrollStart, "")
 }
 
 func colorHealthLine(line string) string {

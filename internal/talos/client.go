@@ -789,12 +789,14 @@ type volumeEnvelope struct {
 		ID string `json:"id"`
 	} `json:"metadata"`
 	Spec struct {
-		Phase         string `json:"phase"`
-		DiskID        string `json:"diskID"`
-		MountLocation string `json:"mountLocation"`
-		Filesystem    string `json:"filesystem"`
-		Size          uint64 `json:"size"`
-		Available     uint64 `json:"available"`
+		Type           string `json:"type"`
+		Phase          string `json:"phase"`
+		ParentLocation string `json:"parentLocation"` // e.g. "/dev/vda"
+		MountSpec      struct {
+			TargetPath string `json:"targetPath"`
+		} `json:"mountSpec"`
+		Filesystem string `json:"filesystem"`
+		Size       uint64 `json:"size"`
 	} `json:"spec"`
 }
 
@@ -809,17 +811,17 @@ func (c *Client) GetVolumeStatus(ctx context.Context, node string) ([]VolumeInfo
 	}
 	var result []VolumeInfo
 	for _, e := range envs {
-		if e.Spec.Size == 0 {
-			continue // skip volumes with no size info
+		if e.Spec.Type != "partition" || e.Spec.Size == 0 {
+			continue
 		}
+		diskID := strings.TrimPrefix(e.Spec.ParentLocation, "/dev/")
 		result = append(result, VolumeInfo{
-			ID:        e.Metadata.ID,
-			DiskID:    e.Spec.DiskID,
-			Mount:     e.Spec.MountLocation,
-			FS:        e.Spec.Filesystem,
-			Size:      e.Spec.Size,
-			Available: e.Spec.Available,
-			Phase:     e.Spec.Phase,
+			ID:     e.Metadata.ID,
+			DiskID: diskID,
+			Mount:  e.Spec.MountSpec.TargetPath,
+			FS:     e.Spec.Filesystem,
+			Size:   e.Spec.Size,
+			Phase:  e.Spec.Phase,
 		})
 	}
 	return result, nil

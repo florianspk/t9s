@@ -17,11 +17,13 @@ func (app App) handleExtensionsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.extCur > 0 {
 			app.extCur--
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.extCur, len(app.filteredExtensions()), app.mainHeight()-3)
 		}
 
 	case "down", "j":
 		if app.extCur < len(app.filteredExtensions())-1 {
 			app.extCur++
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.extCur, len(app.filteredExtensions()), app.mainHeight()-3)
 		}
 
 	case "C":
@@ -75,10 +77,7 @@ func (app App) renderExtensions(height int) string {
 	sb.WriteString(header)
 	sb.WriteByte('\n')
 
-	start := 0
-	if app.extCur >= height-3 {
-		start = app.extCur - (height - 4)
-	}
+	start := clampScrollStart(app.viewScrollStart, app.extCur, len(exts), height-3)
 
 	for i := start; i < len(exts) && i-start < height-3; i++ {
 		e := exts[i]

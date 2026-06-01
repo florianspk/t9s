@@ -19,10 +19,12 @@ func (app App) handleContainersKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.contCur > 0 {
 			app.contCur--
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.contCur, len(app.containers), app.mainHeight()-3)
 		}
 	case "down", "j":
 		if app.contCur < len(app.containers)-1 {
 			app.contCur++
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.contCur, len(app.containers), app.mainHeight()-3)
 		}
 	case "r":
 		if app.selNode != nil {
@@ -100,7 +102,7 @@ func (app App) renderContainers(height int) string {
 			start = prev
 		}
 	} else {
-		start = computeScrollStart(app.contCur, len(app.containers), maxRows)
+		start = clampScrollStart(app.viewScrollStart, app.contCur, len(app.containers), maxRows)
 	}
 
 	lineCount := 0

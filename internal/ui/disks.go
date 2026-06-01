@@ -18,10 +18,12 @@ func (app App) handleDisksKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.listScroll > 0 {
 			app.listScroll--
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.disks), app.mainHeight()-3)
 		}
 	case "down", "j":
 		if app.listScroll < len(app.disks)-1 {
 			app.listScroll++
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.disks), app.mainHeight()-3)
 		}
 	case "r":
 		if app.selNode != nil {
@@ -88,7 +90,7 @@ func (app App) renderDisks(height int) string {
 
 	maxRows := height - 3
 	cur := app.listScroll
-	start := computeScrollStart(cur, len(app.disks), maxRows)
+	start := clampScrollStart(app.viewScrollStart, cur, len(app.disks), maxRows)
 
 	var sb strings.Builder
 	sb.WriteString(title)
@@ -134,31 +136,38 @@ func (app App) renderDisks(height int) string {
 	return sb.String()
 }
 
-// renderVolumeRow renders one volume as an indented sub-row with a usage bar.
+// renderVolumeRow renders one volume as an indented sub-row.
+// When Available is known, shows a usage bar; otherwise shows the partition size.
 func renderVolumeRow(v talos.VolumeInfo, width int) string {
-	used := v.Size - v.Available
-	pct := 0
-	if v.Size > 0 {
-		pct = int(used * 100 / v.Size)
-	}
-
-	bar := usageBar(pct, 12)
-
 	mount := v.Mount
 	if mount == "" {
 		mount = v.ID
 	}
+	fs := v.FS
+	if fs == "" {
+		fs = "—"
+	}
 
-	label := dimStyle.Render(fmt.Sprintf("    %-20s %-6s", truncate(mount, 20), v.FS))
-	usage := fmt.Sprintf("%s  %s / %s (%d%%)",
-		bar,
-		talos.FormatBytes(used),
-		talos.FormatBytes(v.Size),
-		pct,
-	)
-	row := label + "  " + usage
+	label := dimStyle.Render(fmt.Sprintf("    %-20s %-6s", truncate(mount, 20), fs))
+
+	var detail string
+	if v.Available > 0 {
+		used := v.Size - v.Available
+		pct := int(used * 100 / v.Size)
+		bar := usageBar(pct, 12)
+		detail = fmt.Sprintf("%s  %s / %s (%d%%)",
+			bar,
+			talos.FormatBytes(used),
+			talos.FormatBytes(v.Size),
+			pct,
+		)
+	} else {
+		detail = infoStyle.Render(talos.FormatBytes(v.Size))
+	}
+
+	row := label + "  " + detail
 	if width > 0 && lipgloss.Width(row) > width {
-		row = label + "  " + usage[:max(0, width-lipgloss.Width(label)-2)]
+		row = label + "  " + detail[:max(0, width-lipgloss.Width(label)-2)]
 	}
 	return row
 }

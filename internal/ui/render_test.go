@@ -301,7 +301,7 @@ func TestRenderLinesCursorHeightBudget(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(fmt.Sprintf("w%d_r%d_cur%d", tc.width, tc.maxRows, tc.cur), func(t *testing.T) {
-			out := renderLinesCursor(lines, tc.cur, tc.width, tc.maxRows, "")
+			out := renderLinesCursor(lines, tc.cur, tc.width, tc.maxRows, 0, "")
 			if got := lineCount(out); got > tc.maxRows {
 				t.Errorf("got %d lines, want ≤ %d", got, tc.maxRows)
 			}
@@ -314,7 +314,7 @@ func TestRenderLinesCursorAlwaysVisible(t *testing.T) {
 	for _, cur := range []int{0, 10, 25, 49} {
 		cur := cur
 		t.Run(fmt.Sprintf("cur%d", cur), func(t *testing.T) {
-			out := renderLinesCursor(lines, cur, 80, 20, "")
+			out := renderLinesCursor(lines, cur, 80, 20, 0, "")
 			if !strings.Contains(out, "▶") {
 				t.Errorf("▶ not visible at cur=%d", cur)
 			}
@@ -378,7 +378,7 @@ func TestCountMatches(t *testing.T) {
 
 func TestRenderLinesCursorFindHighlight(t *testing.T) {
 	lines := []string{"no match here", "ERROR: something bad", "normal line"}
-	out := renderLinesCursor(lines, 0, 80, 10, "error")
+	out := renderLinesCursor(lines, 0, 80, 10, 0, "error")
 	if !strings.Contains(out, "▸") {
 		t.Error("▸ marker expected for matching line")
 	}
@@ -386,7 +386,7 @@ func TestRenderLinesCursorFindHighlight(t *testing.T) {
 
 func TestRenderLinesCursorNoFindQuery(t *testing.T) {
 	lines := makeLines(5)
-	out := renderLinesCursor(lines, 0, 80, 10, "")
+	out := renderLinesCursor(lines, 0, 80, 10, 0, "")
 	if strings.Contains(out, "▸") {
 		t.Error("▸ must not appear when findQuery is empty")
 	}

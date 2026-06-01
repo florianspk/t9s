@@ -17,10 +17,12 @@ func (app App) handleProcessesKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.listScroll > 0 {
 			app.listScroll--
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.processes), app.mainHeight()-3)
 		}
 	case "down", "j":
 		if app.listScroll < len(app.processes)-1 {
 			app.listScroll++
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.processes), app.mainHeight()-3)
 		}
 	case "r":
 		if app.selNode != nil {
@@ -84,7 +86,7 @@ func (app App) renderProcesses(height int) string {
 			start = prev
 		}
 	} else {
-		start = computeScrollStart(cur, len(app.processes), maxRows)
+		start = clampScrollStart(app.viewScrollStart, cur, len(app.processes), maxRows)
 	}
 
 	var sb strings.Builder

@@ -26,6 +26,24 @@ func (app App) handleLogsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	}
 
 	n := len(app.logLines)
+	findBarH := 0
+	if app.findActive || app.findQuery != "" {
+		findBarH = 1
+	}
+	logMaxRows := max(1, app.mainHeight()-2-findBarH)
+	// Approximate anchor boundary (exact value accounts for wrapped lines but
+	// this is close enough for maintaining the scroll offset in the key handler).
+	approxAnchor := max(0, n-logMaxRows)
+
+	updateLogScroll := func() {
+		if app.logCur >= approxAnchor {
+			// Inside anchor window — reset so the transition out is smooth.
+			app.viewScrollStart = approxAnchor
+		} else {
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.logCur, n, logMaxRows)
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
@@ -42,18 +60,24 @@ func (app App) handleLogsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		if app.logCur > 0 {
 			app.logCur--
 		}
+		updateLogScroll()
 	case "down", "j":
 		if app.logCur < n-1 {
 			app.logCur++
 		}
+		updateLogScroll()
 	case "pgup":
 		app.logCur = max(0, app.logCur-app.mainHeight()/2)
+		updateLogScroll()
 	case "pgdown":
 		app.logCur = min(max(0, n-1), app.logCur+app.mainHeight()/2)
+		updateLogScroll()
 	case "g":
 		app.logCur = 0
+		updateLogScroll()
 	case "G":
 		app.logCur = max(0, n-1)
+		updateLogScroll()
 	case "/":
 		app.findActive = true
 		app.findInput.SetValue("")
@@ -99,7 +123,7 @@ func (app App) renderLogs(height int) string {
 	if app.findActive || app.findQuery != "" {
 		findBarH = 1
 	}
-	content := renderLinesCursor(app.logLines, app.logCur, app.width, height-2-findBarH, app.findQuery)
+	content := renderLinesCursor(app.logLines, app.logCur, app.width, height-2-findBarH, app.viewScrollStart, app.findQuery)
 	return title + content + app.renderFindBar(app.logLines)
 }
 
@@ -196,9 +220,10 @@ func countMatches(lines []string, q string) int {
 
 // renderLinesCursor renders a scrollable, cursor-highlighted list of lines.
 // findQuery, when non-empty, marks matching lines with a ▸ prefix.
-//
-// The cursor lands near the bottom of the visible area (tail-f style).
-func renderLinesCursor(lines []string, cur, width, maxRows int, findQuery string) string {
+// scrollStart is the caller's persisted scroll offset, used when the cursor
+// is above the anchor window so the cursor moves within the view instead of
+// being pinned to the top row.
+func renderLinesCursor(lines []string, cur, width, maxRows, scrollStart int, findQuery string) string {
 	if len(lines) == 0 || maxRows <= 0 {
 		return ""
 	}
@@ -216,19 +241,55 @@ func renderLinesCursor(lines []string, cur, width, maxRows int, findQuery string
 
 	fq := strings.ToLower(findQuery)
 
-	// Walk backward from cur consuming up to (maxRows-1) physical lines so
-	// the cursor lands near the bottom of the view (tail-f style).
-	start := cur
+	// Anchor the view to the LAST line of the log buffer.
+	// Walk backward from len(lines)-1 until we fill the screen.
+	// The cursor then moves freely inside this window without
+	// shifting the view — the latest log stays visible at the
+	// bottom until the cursor scrolls above the top of the window.
+	anchorStart := len(lines) - 1
 	budget := maxRows - 1
-	for start > 0 && budget > 0 {
-		prev := start - 1
-		// Wrap raw text — ANSI codes don't affect column width.
+	for anchorStart > 0 && budget > 0 {
+		prev := anchorStart - 1
 		n := strings.Count(wrap.String(lines[prev], max(1, w-2)), "\n") + 1
 		if n > budget {
 			break
 		}
 		budget -= n
-		start = prev
+		anchorStart = prev
+	}
+
+	// If the cursor is inside the anchor window, keep the anchor so the
+	// last line stays pinned at the bottom.
+	// If the cursor moved above the anchor window, apply the same
+	// boundary-scroll logic as list views: cursor moves freely inside the
+	// visible area and the window only scrolls when the cursor hits an edge.
+	//
+	// clampScrollStart counts logical items, not physical rows. For wrapped
+	// lines the two differ, so we verify the cursor is reachable from the
+	// chosen start and fall back to start=cur (cursor at top) if not.
+	var start int
+	if cur >= anchorStart {
+		start = anchorStart
+	} else {
+		candidate := clampScrollStart(scrollStart, cur, len(lines), maxRows)
+		rows := 0
+		curReachable := false
+		for i := candidate; i < len(lines) && rows < maxRows; i++ {
+			n := strings.Count(wrap.String(lines[i], max(1, w-2)), "\n") + 1
+			if n > maxRows-rows {
+				n = maxRows - rows
+			}
+			rows += n
+			if i == cur {
+				curReachable = true
+				break
+			}
+		}
+		if curReachable {
+			start = candidate
+		} else {
+			start = cur // fallback: cursor pinned to top
+		}
 	}
 
 	var sb strings.Builder

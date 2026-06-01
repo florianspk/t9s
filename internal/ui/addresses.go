@@ -17,10 +17,12 @@ func (app App) handleAddressesKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.listScroll > 0 {
 			app.listScroll--
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.addresses), app.mainHeight()-3)
 		}
 	case "down", "j":
 		if app.listScroll < len(app.addresses)-1 {
 			app.listScroll++
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.addresses), app.mainHeight()-3)
 		}
 	case "r":
 		if app.selNode != nil {
@@ -90,7 +92,7 @@ func (app App) renderAddresses(height int) string {
 			start = prev
 		}
 	} else {
-		start = computeScrollStart(cur, len(app.addresses), maxRows)
+		start = clampScrollStart(app.viewScrollStart, cur, len(app.addresses), maxRows)
 	}
 
 	var sb strings.Builder
