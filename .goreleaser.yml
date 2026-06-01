@@ -47,23 +47,24 @@ release:
   draft: false
   prerelease: auto
 
-brews:
+homebrew_casks:
   - name: t9s
-    repository:
-      owner: florianspk
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
+    ids:
+      - t9s
+    binaries:
+      - t9s
+    url:
+      verified: "github.com/florianspk/t9s/"
+    directory: Casks
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
     homepage: "https://github.com/florianspk/t9s"
     description: "k9s-inspired TUI for managing Talos Linux clusters via talosctl"
-    license: "Non-Commercial Source-Available"
-    install: |
-      bin.install "t9s"
-    test: |
-      system "#{bin}/t9s --version"
+    repository:
+      owner: florianspk
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
 
 nfpms:
   - id: t9s

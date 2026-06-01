@@ -36,6 +36,17 @@ Built with Go, [bubbletea](https://github.com/charmbracelet/bubbletea) and [lipg
 
 ## Installation
 
+**Homebrew (macOS / Linux)**
+
+```bash
+brew tap florianspk/tap
+brew install --cask t9s
+```
+
+**Binaries** — download from [GitHub Releases](https://github.com/florianspk/t9s/releases) (`.tar.gz` for linux/darwin, `.deb`/`.rpm`/`.apk` for Linux).
+
+**From source**
+
 ```bash
 git clone https://github.com/florianspk/t9s
 cd t9s
