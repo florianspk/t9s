@@ -142,6 +142,7 @@ type App struct {
 	// Disks
 	disks       []talos.DiskInfo
 	diskLoading bool
+	volumes     []talos.VolumeInfo // loaded alongside disks
 
 	// Processes
 	processes   []talos.ProcessInfo
@@ -423,6 +424,12 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			app.disks = msg.disks
 			app.statusMsg = fmt.Sprintf("%d disks", len(msg.disks))
+		}
+		return app, nil
+
+	case volumesLoadedMsg:
+		if msg.err == nil {
+			app.volumes = msg.volumes
 		}
 		return app, nil
 
@@ -927,6 +934,17 @@ func (app App) loadDisks() tea.Cmd {
 		defer cancel()
 		disks, err := client.GetDisks(ctx, node)
 		return disksLoadedMsg{disks: disks, err: err}
+	}
+}
+
+func (app App) loadVolumes() tea.Cmd {
+	client := app.client
+	node := app.selNode.IP
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		vols, err := client.GetVolumeStatus(ctx, node)
+		return volumesLoadedMsg{volumes: vols, err: err}
 	}
 }
 

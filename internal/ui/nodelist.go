@@ -196,7 +196,8 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app.disks = nil
 		app.diskLoading = true
 		app = app.goTo(StateDisks)
-		return app, app.loadDisks()
+		app.volumes = nil
+		return app, tea.Batch(app.loadDisks(), app.loadVolumes())
 
 	case "H":
 		app.selNode = app.selectedNode()

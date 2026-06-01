@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/florianspk/t9s/internal/talos"
 )
 
 func (app App) handleDisksKey(msg tea.KeyMsg) (App, tea.Cmd) {
@@ -25,7 +27,8 @@ func (app App) handleDisksKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		if app.selNode != nil {
 			app.diskLoading = true
 			app.listScroll = 0
-			return app, app.loadDisks()
+			app.volumes = nil
+			return app, tea.Batch(app.loadDisks(), app.loadVolumes())
 		}
 	case "esc", "q":
 		app = app.goBack()
@@ -50,15 +53,13 @@ func (app App) renderDisks(height int) string {
 	}
 
 	const (
-		colDev = 10
+		colDev  = 10
 		colType = 6
 		// overhead = cursor(2) + dev + sep(2) + type + sep(2) + sep_after_model(2) + sep_after_serial(2)
-		overhead = 2 + colDev + 2 + colType + 2 + 2 + 2 // = 26
-		sizeEst  = 10                                    // reserve for size value ("1.00 TB" etc.)
+		overhead = 2 + colDev + 2 + colType + 2 + 2 + 2
+		sizeEst  = 10
 	)
 
-	// Remaining space is shared between MODEL (≤20) and SERIAL (≤16).
-	// MODEL gets 60% of available, SERIAL gets the rest, both capped.
 	avail := app.width - overhead - sizeEst
 	if avail < 14 {
 		avail = 14
@@ -77,6 +78,14 @@ func (app App) renderDisks(height int) string {
 			col("MODEL", colModel) + "  " + col("SERIAL", colSerial) + "  SIZE",
 	)
 
+	// Build volume index keyed by disk device name (e.g. "sda").
+	volsByDisk := make(map[string][]talos.VolumeInfo)
+	for _, v := range app.volumes {
+		if v.DiskID != "" {
+			volsByDisk[v.DiskID] = append(volsByDisk[v.DiskID], v)
+		}
+	}
+
 	maxRows := height - 3
 	cur := app.listScroll
 	start := computeScrollStart(cur, len(app.disks), maxRows)
@@ -86,7 +95,8 @@ func (app App) renderDisks(height int) string {
 	sb.WriteString(hdr)
 	sb.WriteByte('\n')
 
-	for i := start; i < len(app.disks) && i-start < maxRows; i++ {
+	rowsLeft := maxRows
+	for i := start; i < len(app.disks) && rowsLeft > 0; i++ {
 		d := app.disks[i]
 		selected := i == cur
 
@@ -95,7 +105,6 @@ func (app App) renderDisks(height int) string {
 			cursor = okStyle.Render("▶ ")
 		}
 
-		// MODEL is a middle column — always truncate so SERIAL/SIZE stay aligned.
 		row := cursor +
 			col(truncate(d.Dev, colDev), colDev) + "  " +
 			col(truncate(d.Type, colType), colType) + "  " +
@@ -109,6 +118,71 @@ func (app App) renderDisks(height int) string {
 			sb.WriteString(row)
 		}
 		sb.WriteByte('\n')
+		rowsLeft--
+
+		// Strip "/dev/" prefix to match volumestatus diskID field.
+		diskKey := strings.TrimPrefix(d.Dev, "/dev/")
+		for _, v := range volsByDisk[diskKey] {
+			if rowsLeft <= 0 {
+				break
+			}
+			sb.WriteString(renderVolumeRow(v, app.width))
+			sb.WriteByte('\n')
+			rowsLeft--
+		}
 	}
 	return sb.String()
+}
+
+// renderVolumeRow renders one volume as an indented sub-row with a usage bar.
+func renderVolumeRow(v talos.VolumeInfo, width int) string {
+	used := v.Size - v.Available
+	pct := 0
+	if v.Size > 0 {
+		pct = int(used * 100 / v.Size)
+	}
+
+	bar := usageBar(pct, 12)
+
+	mount := v.Mount
+	if mount == "" {
+		mount = v.ID
+	}
+
+	label := dimStyle.Render(fmt.Sprintf("    %-20s %-6s", truncate(mount, 20), v.FS))
+	usage := fmt.Sprintf("%s  %s / %s (%d%%)",
+		bar,
+		talos.FormatBytes(used),
+		talos.FormatBytes(v.Size),
+		pct,
+	)
+	row := label + "  " + usage
+	if width > 0 && lipgloss.Width(row) > width {
+		row = label + "  " + usage[:max(0, width-lipgloss.Width(label)-2)]
+	}
+	return row
+}
+
+// usageBar returns a compact block-character progress bar of given width.
+func usageBar(pct, width int) string {
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	filled := pct * width / 100
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
+
+	var style lipgloss.Style
+	switch {
+	case pct >= 90:
+		style = errStyle
+	case pct >= 70:
+		style = warnStyle
+	default:
+		style = okStyle
+	}
+	return style.Render(bar)
 }

@@ -43,6 +43,11 @@ type disksLoadedMsg struct {
 	err   error
 }
 
+type volumesLoadedMsg struct {
+	volumes []talos.VolumeInfo
+	err     error
+}
+
 type processesLoadedMsg struct {
 	processes []talos.ProcessInfo
 	err       error

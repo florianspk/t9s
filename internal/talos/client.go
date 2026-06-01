@@ -544,14 +544,15 @@ func (c *Client) GetDisks(ctx context.Context, node string) ([]DiskInfo, error) 
 			Model:  e.Spec.Model,
 			Serial: e.Spec.Serial,
 			Type:   diskType,
-			Size:   formatBytes(e.Spec.Size),
+			Size:   FormatBytes(e.Spec.Size),
 		})
 	}
 	return result, nil
 }
 
 // formatBytes converts a byte count to a compact human-readable string.
-func formatBytes(b uint64) string {
+// FormatBytes converts a byte count to a compact human-readable string.
+func FormatBytes(b uint64) string {
 	const unit = 1000
 	if b < unit {
 		return fmt.Sprintf("%d B", b)
@@ -779,6 +780,49 @@ func (c *Client) runStreaming(ctx context.Context, ch chan<- string, args ...str
 	go scanAll(errR)
 	scanAll(outR)
 	return cmd.Wait()
+}
+
+// --- Volume status ---
+
+type volumeEnvelope struct {
+	Metadata struct {
+		ID string `json:"id"`
+	} `json:"metadata"`
+	Spec struct {
+		Phase         string `json:"phase"`
+		DiskID        string `json:"diskID"`
+		MountLocation string `json:"mountLocation"`
+		Filesystem    string `json:"filesystem"`
+		Size          uint64 `json:"size"`
+		Available     uint64 `json:"available"`
+	} `json:"spec"`
+}
+
+func (c *Client) GetVolumeStatus(ctx context.Context, node string) ([]VolumeInfo, error) {
+	data, err := c.run(ctx, "get", "volumestatus", "-n", node, "-o", "json")
+	if err != nil {
+		return nil, err
+	}
+	envs, err := parseJSONStream[volumeEnvelope](data)
+	if err != nil {
+		return nil, err
+	}
+	var result []VolumeInfo
+	for _, e := range envs {
+		if e.Spec.Size == 0 {
+			continue // skip volumes with no size info
+		}
+		result = append(result, VolumeInfo{
+			ID:        e.Metadata.ID,
+			DiskID:    e.Spec.DiskID,
+			Mount:     e.Spec.MountLocation,
+			FS:        e.Spec.Filesystem,
+			Size:      e.Spec.Size,
+			Available: e.Spec.Available,
+			Phase:     e.Spec.Phase,
+		})
+	}
+	return result, nil
 }
 
 // --- Machine config ---
