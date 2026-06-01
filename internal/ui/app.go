@@ -83,7 +83,8 @@ type App struct {
 	logStreaming bool
 
 	// Machine config
-	machConf     string
+	machConf     string // raw full YAML from talosctl
+	machSection  string // extracted "machine:" section shown in UI
 	machVP       viewport.Model
 	machLoading  bool
 	machEditFile string // temp file path while editing
@@ -321,7 +322,8 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.statusMsg = errStyle.Render("Error: " + msg.err.Error())
 		} else {
 			app.machConf = msg.content
-			app.machVP.SetContent(msg.content)
+			app.machSection = extractMachineSection(msg.content)
+			app.machVP.SetContent(app.machSection)
 			app.statusMsg = ""
 		}
 		return app, nil
@@ -340,7 +342,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.machEditFile = ""
 			return app, nil
 		}
-		if string(content) == app.machConf {
+		if string(content) == app.machSection {
 			app.statusMsg = dimStyle.Render("No changes.")
 			os.Remove(app.machEditFile)
 			app.machEditFile = ""
@@ -362,6 +364,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			app.statusMsg = okStyle.Render("Config applied!")
 			app.machConf = ""
+			app.machSection = ""
 			app.machLoading = true
 			return app, app.loadMachineConfig()
 		}

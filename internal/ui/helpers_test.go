@@ -376,3 +376,57 @@ func TestFilteredServicesEmptyList(t *testing.T) {
 		t.Errorf("empty services: want 0, got %d", len(got))
 	}
 }
+
+// ── extractMachineSection ─────────────────────────────────────────────────────
+
+func TestExtractMachineSectionFromSpec(t *testing.T) {
+	raw := `node: 10.0.0.1
+metadata:
+    namespace: v1alpha1
+spec:
+    machine:
+        type: controlplane
+        install:
+            disk: /dev/sda
+    cluster:
+        id: test-cluster
+`
+	got := extractMachineSection(raw)
+	if !strings.Contains(got, "machine:") {
+		t.Error("output must contain machine: key")
+	}
+	if strings.Contains(got, "cluster:") {
+		t.Error("cluster: section must not appear in extracted output")
+	}
+	if strings.Contains(got, "metadata:") {
+		t.Error("metadata must not appear in extracted output")
+	}
+	if !strings.Contains(got, "controlplane") {
+		t.Error("machine type must be preserved")
+	}
+}
+
+func TestExtractMachineSectionDirectKey(t *testing.T) {
+	raw := `machine:
+    type: worker
+    network:
+        hostname: talos-worker-01
+cluster:
+    id: mycluster
+`
+	got := extractMachineSection(raw)
+	if !strings.Contains(got, "machine:") {
+		t.Error("output must contain machine: key")
+	}
+	if strings.Contains(got, "cluster:") {
+		t.Error("cluster: must not appear")
+	}
+}
+
+func TestExtractMachineSectionFallbackOnInvalidYAML(t *testing.T) {
+	raw := "not: valid: yaml: ::::"
+	got := extractMachineSection(raw)
+	if got != raw {
+		t.Error("invalid YAML must return raw content unchanged")
+	}
+}

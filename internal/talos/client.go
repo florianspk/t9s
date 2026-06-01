@@ -748,7 +748,7 @@ func (c *Client) runStreaming(ctx context.Context, ch chan<- string, args ...str
 
 // --- Machine config ---
 
-// ApplyConfig applies a machine config file to a node using talosctl apply-config.
+// ApplyConfig applies a full machine config file using talosctl apply-config.
 // Mode "auto" picks the least disruptive method (no reboot if not required).
 func (c *Client) ApplyConfig(ctx context.Context, node, file string) error {
 	args := append(c.baseArgs(),
@@ -756,6 +756,21 @@ func (c *Client) ApplyConfig(ctx context.Context, node, file string) error {
 		"-n", node,
 		"--file", file,
 		"--mode", "auto",
+	)
+	out, err := exec.CommandContext(ctx, "talosctl", args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// PatchMachineConfig applies a strategic merge patch to the machine config.
+// The patch file should contain only the fields to change (e.g. machine: section).
+func (c *Client) PatchMachineConfig(ctx context.Context, node, file string) error {
+	args := append(c.baseArgs(),
+		"patch", "machineconfig",
+		"-n", node,
+		"--patch", "@"+file,
 	)
 	out, err := exec.CommandContext(ctx, "talosctl", args...).CombinedOutput()
 	if err != nil {
