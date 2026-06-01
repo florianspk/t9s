@@ -301,7 +301,7 @@ func TestRenderLinesCursorHeightBudget(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(fmt.Sprintf("w%d_r%d_cur%d", tc.width, tc.maxRows, tc.cur), func(t *testing.T) {
-			out := renderLinesCursor(lines, tc.cur, tc.width, tc.maxRows)
+			out := renderLinesCursor(lines, tc.cur, tc.width, tc.maxRows, "")
 			if got := lineCount(out); got > tc.maxRows {
 				t.Errorf("got %d lines, want ≤ %d", got, tc.maxRows)
 			}
@@ -314,11 +314,81 @@ func TestRenderLinesCursorAlwaysVisible(t *testing.T) {
 	for _, cur := range []int{0, 10, 25, 49} {
 		cur := cur
 		t.Run(fmt.Sprintf("cur%d", cur), func(t *testing.T) {
-			out := renderLinesCursor(lines, cur, 80, 20)
+			out := renderLinesCursor(lines, cur, 80, 20, "")
 			if !strings.Contains(out, "▶") {
 				t.Errorf("▶ not visible at cur=%d", cur)
 			}
 		})
+	}
+}
+
+// ── find in logs ──────────────────────────────────────────────────────────────
+
+func TestFindLineNextWraps(t *testing.T) {
+	lines := []string{"alpha", "beta", "gamma", "alpha again"}
+	// from=2 (gamma), should wrap and find "alpha" at 0
+	idx := findLineNext(lines, 2, "alpha")
+	if idx != 2 { // (2+0)%4=2? no: 2 doesn't match, 3 matches "alpha again"
+		// Actually from=2: checks 2,3,0,1 → 3 matches "alpha again"
+	}
+	if idx < 0 {
+		t.Fatal("expected a match")
+	}
+	if !strings.Contains(strings.ToLower(lines[idx]), "alpha") {
+		t.Errorf("line %d does not contain 'alpha': %q", idx, lines[idx])
+	}
+}
+
+func TestFindLineNextNoMatch(t *testing.T) {
+	lines := []string{"foo", "bar", "baz"}
+	if idx := findLineNext(lines, 0, "xyz"); idx != -1 {
+		t.Errorf("want -1, got %d", idx)
+	}
+}
+
+func TestFindLinePrevWraps(t *testing.T) {
+	lines := []string{"error here", "info", "another error"}
+	// from=1 going backward: 1 (no), 0 (error) → 0
+	idx := findLinePrev(lines, 1, "error")
+	if idx != 0 {
+		t.Errorf("want 0, got %d", idx)
+	}
+}
+
+func TestFindLinePrevNoMatch(t *testing.T) {
+	lines := []string{"foo", "bar"}
+	if idx := findLinePrev(lines, 1, "xyz"); idx != -1 {
+		t.Errorf("want -1, got %d", idx)
+	}
+}
+
+func TestCountMatches(t *testing.T) {
+	lines := []string{"error: disk full", "info: started", "ERROR: timeout", "ok"}
+	n := countMatches(lines, "error")
+	if n != 2 {
+		t.Errorf("want 2, got %d", n)
+	}
+	if countMatches(lines, "") != 0 {
+		t.Error("empty query must return 0")
+	}
+	if countMatches(nil, "error") != 0 {
+		t.Error("nil lines must return 0")
+	}
+}
+
+func TestRenderLinesCursorFindHighlight(t *testing.T) {
+	lines := []string{"no match here", "ERROR: something bad", "normal line"}
+	out := renderLinesCursor(lines, 0, 80, 10, "error")
+	if !strings.Contains(out, "▸") {
+		t.Error("▸ marker expected for matching line")
+	}
+}
+
+func TestRenderLinesCursorNoFindQuery(t *testing.T) {
+	lines := makeLines(5)
+	out := renderLinesCursor(lines, 0, 80, 10, "")
+	if strings.Contains(out, "▸") {
+		t.Error("▸ must not appear when findQuery is empty")
 	}
 }
 

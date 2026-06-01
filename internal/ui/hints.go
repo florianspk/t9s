@@ -40,12 +40,16 @@ func stateHints(app App) []hint {
 			{"↑↓", "Select line"},
 			{"PgUp/Dn", "Half page"},
 			{"g/G", "Top/Bottom"},
+			{"/", "Find"},
+			{"n/N", "Next/Prev"},
 			{"Esc/q", "Back"},
 		}
 	case StateMachineConfig:
 		return []hint{
 			{"↑↓", "Scroll"},
+			{"PgUp/Dn", "Half page"},
 			{"g/G", "Top/Bottom"},
+			{"e", "Edit & apply"},
 			{"Esc/q", "Back"},
 		}
 	case StateExtensions:

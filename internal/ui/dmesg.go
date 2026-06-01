@@ -18,12 +18,22 @@ func waitForDmesgLine(ch <-chan string) tea.Cmd {
 }
 
 func (app App) handleDmesgKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.findActive {
+		var cmd tea.Cmd
+		app, app.dmesgCur, cmd = app.handleFindKey(msg, app.dmesgLines, app.dmesgCur)
+		return app, cmd
+	}
+
 	n := len(app.dmesgLines)
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
 	case "esc", "q":
+		if app.findQuery != "" {
+			app.findQuery = ""
+			return app, nil
+		}
 		app.stopDmesg()
 		app = app.goBack()
 		return app, nil
@@ -43,6 +53,22 @@ func (app App) handleDmesgKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app.dmesgCur = 0
 	case "G":
 		app.dmesgCur = max(0, n-1)
+	case "/":
+		app.findActive = true
+		app.findInput.SetValue("")
+		return app, app.findInput.Focus()
+	case "n":
+		if app.findQuery != "" {
+			if idx := findLineNext(app.dmesgLines, app.dmesgCur+1, app.findQuery); idx >= 0 {
+				app.dmesgCur = idx
+			}
+		}
+	case "N":
+		if app.findQuery != "" {
+			if idx := findLinePrev(app.dmesgLines, app.dmesgCur-1, app.findQuery); idx >= 0 {
+				app.dmesgCur = idx
+			}
+		}
 	}
 	return app, nil
 }
@@ -65,5 +91,10 @@ func (app App) renderDmesg(height int) string {
 			infoStyle.Render("Waiting for dmesg…"))
 	}
 
-	return title + renderLinesCursor(app.dmesgLines, app.dmesgCur, app.width, height-2)
+	findBarH := 0
+	if app.findActive || app.findQuery != "" {
+		findBarH = 1
+	}
+	content := renderLinesCursor(app.dmesgLines, app.dmesgCur, app.width, height-2-findBarH, app.findQuery)
+	return title + content + app.renderFindBar(app.dmesgLines)
 }

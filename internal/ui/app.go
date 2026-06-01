@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -82,9 +83,11 @@ type App struct {
 	logStreaming bool
 
 	// Machine config
-	machConf    string
-	machVP      viewport.Model
-	machLoading bool
+	machConf     string
+	machVP       viewport.Model
+	machLoading  bool
+	machEditFile string // temp file path while editing
+	machEditMode bool   // waiting for apply confirmation
 
 	// Extensions
 	extensions []talos.Extension
@@ -173,6 +176,11 @@ type App struct {
 	logCur    int
 	dmesgCur  int
 	healthCur int
+
+	// Find in log/dmesg views (/ n N)
+	findInput  textinput.Model
+	findActive bool
+	findQuery  string
 }
 
 func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
@@ -185,6 +193,11 @@ func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 	si.CharLimit = 100
 	si.Prompt = ""
 
+	fi := textinput.New()
+	fi.Placeholder = "search…"
+	fi.CharLimit = 100
+	fi.Prompt = ""
+
 	return App{
 		cfg:          cfg,
 		cfgPath:      cfgPath,
@@ -193,6 +206,7 @@ func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 		state:        StateNodeList,
 		upgradeInput: ti,
 		searchInput:  si,
+		findInput:    fi,
 		contexts:     cfg.ContextNames(),
 		logVP:     viewport.New(80, 20),
 		dmesgVP:   viewport.New(80, 20),
@@ -309,6 +323,47 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.machConf = msg.content
 			app.machVP.SetContent(msg.content)
 			app.statusMsg = ""
+		}
+		return app, nil
+
+	case editorDoneMsg:
+		if msg.err != nil {
+			app.statusMsg = errStyle.Render("Editor error: " + msg.err.Error())
+			os.Remove(app.machEditFile)
+			app.machEditFile = ""
+			return app, nil
+		}
+		content, err := os.ReadFile(app.machEditFile)
+		if err != nil {
+			app.statusMsg = errStyle.Render("Cannot read edited file: " + err.Error())
+			os.Remove(app.machEditFile)
+			app.machEditFile = ""
+			return app, nil
+		}
+		if string(content) == app.machConf {
+			app.statusMsg = dimStyle.Render("No changes.")
+			os.Remove(app.machEditFile)
+			app.machEditFile = ""
+			return app, nil
+		}
+		app.machEditMode = true
+		node := ""
+		if app.selNode != nil {
+			node = app.selNode.Hostname
+		}
+		app.statusMsg = warnStyle.Render("Apply config to " + node + "? (y/n)")
+		return app, nil
+
+	case machineConfigAppliedMsg:
+		os.Remove(msg.file)
+		app.machEditFile = ""
+		if msg.err != nil {
+			app.statusMsg = errStyle.Render("Apply failed: " + msg.err.Error())
+		} else {
+			app.statusMsg = okStyle.Render("Config applied!")
+			app.machConf = ""
+			app.machLoading = true
+			return app, app.loadMachineConfig()
 		}
 		return app, nil
 

@@ -87,3 +87,10 @@ type clientVersionMsg struct {
 type kubeVersionsMsg struct {
 	versions map[string]string // node IP → kubelet version
 }
+
+type editorDoneMsg struct{ err error }
+
+type machineConfigAppliedMsg struct {
+	err  error
+	file string // temp file to clean up
+}

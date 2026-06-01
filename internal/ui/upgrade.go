@@ -28,6 +28,14 @@ func (app App) handleUpgradeKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		case "esc":
 			// Navigate back — upgrade keeps running in background.
 			app = app.goBack()
+		case "up", "k":
+			app.upgradeVP.LineUp(1)
+		case "down", "j":
+			app.upgradeVP.LineDown(1)
+		case "pgup":
+			app.upgradeVP.HalfViewUp()
+		case "pgdown":
+			app.upgradeVP.HalfViewDown()
 		case "g":
 			app.upgradeVP.GotoTop()
 		case "G":

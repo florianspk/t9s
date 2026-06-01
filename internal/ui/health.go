@@ -45,7 +45,7 @@ func (app App) renderHealth(height int) string {
 			infoStyle.Render("Running health check…"))
 	}
 
-	return title + renderLinesCursor(app.healthLines, app.healthCur, app.width, height-2)
+	return title + renderLinesCursor(app.healthLines, app.healthCur, app.width, height-2, "")
 }
 
 func colorHealthLine(line string) string {
