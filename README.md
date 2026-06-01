@@ -1,4 +1,6 @@
-<img src="assets/logo.png" alt="t9s" width="200"/>
+<p align="center">
+  <img src="assets/logo.png" alt="t9s" width="350"/>
+</p>
 
 # t9s — TUI for Talos Linux
 
