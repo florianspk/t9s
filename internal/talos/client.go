@@ -487,12 +487,15 @@ func parseExtensionCatalog(data []byte) ([]CatalogExtension, error) {
 // --- Node actions ---
 
 func (c *Client) Reboot(ctx context.Context, node string) error {
-	_, err := c.run(ctx, "reboot", "-n", node)
+	// --wait=false sends the request and returns immediately.
+	// Default (--wait=true) would wait for the node to come back up,
+	// which exceeds any reasonable timeout and always returns an error.
+	_, err := c.run(ctx, "reboot", "-n", node, "--wait=false")
 	return err
 }
 
 func (c *Client) Shutdown(ctx context.Context, node string) error {
-	_, err := c.run(ctx, "shutdown", "-n", node)
+	_, err := c.run(ctx, "shutdown", "-n", node, "--wait=false")
 	return err
 }
 
