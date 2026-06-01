@@ -286,6 +286,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			app.services = msg.services
 			app.svcCur = 0
+			app.statusMsg = fmt.Sprintf("%d services", len(msg.services))
 		}
 		return app, nil
 
@@ -296,6 +297,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			app.extensions = msg.extensions
 			app.extCur = 0
+			app.statusMsg = fmt.Sprintf("%d extensions", len(msg.extensions))
 		}
 		return app, nil
 
@@ -306,6 +308,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			app.machConf = msg.content
 			app.machVP.SetContent(msg.content)
+			app.statusMsg = ""
 		}
 		return app, nil
 
@@ -315,9 +318,10 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.statusMsg = errStyle.Render("Error: " + msg.err.Error())
 		} else {
 			app.prevStats = app.stats
-			app.prevStatsAt = app.statsAt // timestamp of the measurement we're replacing
+			app.prevStatsAt = app.statsAt
 			app.stats = msg.stats
-			app.statsAt = time.Now()      // timestamp of the new measurement
+			app.statsAt = time.Now()
+			app.statusMsg = ""
 		}
 		return app, nil
 
@@ -338,6 +342,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.statusMsg = errStyle.Render("Error: " + msg.err.Error())
 		} else {
 			app.disks = msg.disks
+			app.statusMsg = fmt.Sprintf("%d disks", len(msg.disks))
 		}
 		return app, nil
 
@@ -347,6 +352,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.statusMsg = errStyle.Render("Error: " + msg.err.Error())
 		} else {
 			app.processes = msg.processes
+			app.statusMsg = fmt.Sprintf("%d processes", len(msg.processes))
 		}
 		return app, nil
 
@@ -357,6 +363,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			app.containers = msg.containers
 			app.contCur = 0
+			app.statusMsg = fmt.Sprintf("%d containers", len(msg.containers))
 		}
 		return app, nil
 
@@ -366,6 +373,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.statusMsg = errStyle.Render("Error: " + msg.err.Error())
 		} else {
 			app.addresses = msg.addresses
+			app.statusMsg = fmt.Sprintf("%d addresses", len(msg.addresses))
 		}
 		return app, nil
 
@@ -478,26 +486,13 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return app, nil
 }
 
-// bgPad returns a full-width line filled with the background colour.
-// Used to fill unused rows so the terminal shows no transparent gaps.
-var bgPad = func() func(int) string {
-	style := lipgloss.NewStyle().Background(colorBg)
-	return func(w int) string {
-		if w <= 0 {
-			return ""
-		}
-		return style.Render(strings.Repeat(" ", w))
-	}
-}()
-
-// fillLine pads a single pre-rendered line to exactly app.width cells,
-// filling the right margin with the background colour.
+// fillLine pads a single pre-rendered line to exactly app.width cells.
 func (app App) fillLine(line string) string {
 	w := lipgloss.Width(line)
 	if w >= app.width {
 		return line
 	}
-	return line + bgPad(app.width-w)
+	return line + strings.Repeat(" ", app.width-w)
 }
 
 func (app App) View() string {
@@ -511,7 +506,7 @@ func (app App) View() string {
 	footer := app.renderFooter()
 
 	// Pad main to fill the full height so the footer anchors to the bottom.
-	blankRow := bgPad(app.width) + "\n"
+	blankRow := strings.Repeat(" ", app.width) + "\n"
 	if n := strings.Count(main, "\n"); n < mainH {
 		main += strings.Repeat(blankRow, mainH-n)
 	}
