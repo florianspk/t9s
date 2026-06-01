@@ -170,6 +170,11 @@ type App struct {
 	// Pending confirmation (reboot / shutdown)
 	pendingAction string // "reboot" or "shutdown"
 
+	// Tracks when transient actions (reboot/shutdown) were sent so we can
+	// show the transitional status for up to 90s even if talosctl still
+	// reports the node as "ready" right after the command.
+	rebootingAt map[string]time.Time
+
 	// Generic scroll offset for simple list views (disks, processes, addresses)
 	listScroll int
 
@@ -289,7 +294,21 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				app.nodeCur = max(0, len(app.nodes)-1)
 			}
 			app.statusMsg = fmt.Sprintf("%d nodes", len(app.nodes))
-			// Pick server version from first node to compare with client
+
+			// Override status for nodes still within their reboot/shutdown window.
+			// talosctl get members always reports "ready" even right after the
+			// command is sent, so we keep the transitional status for 90 seconds.
+			for i := range app.nodes {
+				if t, ok := app.rebootingAt[app.nodes[i].IP]; ok {
+					if time.Since(t) < 90*time.Second {
+						app.nodes[i].Status = "rebooting"
+					} else {
+						delete(app.rebootingAt, app.nodes[i].IP)
+					}
+				}
+			}
+
+			// Pick server version from first node to compare with client.
 			if len(msg.nodes) > 0 && app.serverVer == "" {
 				app.serverVer = msg.nodes[0].Version
 				app.verMismatch = checkVersionMismatch(app.clientVer, app.serverVer)
@@ -458,7 +477,29 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			app.statusMsg = errStyle.Render(msg.action + " failed: " + msg.err.Error())
 		} else {
-			app.statusMsg = okStyle.Render(msg.action + " sent successfully")
+			app.statusMsg = okStyle.Render(msg.action + " sent")
+			// Mark the node status locally and record the timestamp so the
+			// periodic tick preserves the transitional status for 90 seconds
+			// (typical reboot time) before letting talosctl's response win.
+			newStatus := ""
+			switch msg.action {
+			case "Reboot":
+				newStatus = "rebooting"
+			case "Shutdown":
+				newStatus = "shutting-down"
+			}
+			if newStatus != "" {
+				if app.rebootingAt == nil {
+					app.rebootingAt = make(map[string]time.Time)
+				}
+				app.rebootingAt[msg.nodeIP] = time.Now()
+				for i := range app.nodes {
+					if app.nodes[i].IP == msg.nodeIP {
+						app.nodes[i].Status = newStatus
+						break
+					}
+				}
+			}
 		}
 		return app, nil
 
@@ -1009,7 +1050,7 @@ func (app App) execReboot() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		err := client.Reboot(ctx, node)
-		return actionDoneMsg{action: "Reboot", err: err}
+		return actionDoneMsg{action: "Reboot", nodeIP: node, err: err}
 	}
 }
 
@@ -1020,7 +1061,7 @@ func (app App) execShutdown() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		err := client.Shutdown(ctx, node)
-		return actionDoneMsg{action: "Shutdown", err: err}
+		return actionDoneMsg{action: "Shutdown", nodeIP: node, err: err}
 	}
 }
 

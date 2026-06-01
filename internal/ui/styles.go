@@ -68,6 +68,20 @@ var helpBoxStyle = lipgloss.NewStyle().
 	Background(colorBgHead)
 
 // Semantic coloring helpers
+func colorNodeStatus(s string) string {
+	switch s {
+	case "ready":
+		return okStyle.Render(s)
+	case "rebooting":
+		return warnStyle.Render(s)
+	case "shutting-down":
+		return errStyle.Render(s)
+	case "not-ready", "not ready":
+		return errStyle.Render(s)
+	}
+	return dimStyle.Render(s)
+}
+
 func colorRole(role string) string {
 	switch role {
 	case "controlplane":

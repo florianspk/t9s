@@ -63,6 +63,7 @@ type healthDoneMsg struct{}
 
 type actionDoneMsg struct {
 	action string
+	nodeIP string // IP of the node the action targeted
 	err    error
 }
 

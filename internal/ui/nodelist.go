@@ -304,7 +304,7 @@ func (app App) renderNodeList(height int) string {
 		// Apply semantic colors to plain-padded strings
 		roleColored   := colorRole(role)
 		verColored    := dimStyle.Render(ver)
-		statusColored := okStyle.Render(n.Status)
+		statusColored := colorNodeStatus(n.Status)
 		if selected {
 			roleColored   = role
 			verColored    = ver
