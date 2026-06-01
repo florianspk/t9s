@@ -49,6 +49,8 @@ func stateHints(app App) []hint {
 			{"↑↓", "Scroll"},
 			{"PgUp/Dn", "Half page"},
 			{"g/G", "Top/Bottom"},
+			{"/", "Find"},
+			{"n/N", "Next/Prev"},
 			{"e", "Edit & apply"},
 			{"Esc/q", "Back"},
 		}

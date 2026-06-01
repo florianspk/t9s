@@ -85,10 +85,13 @@ type App struct {
 	// Machine config
 	machConf     string // raw full YAML from talosctl
 	machSection  string // extracted "machine:" section shown in UI
-	machVP       viewport.Model
-	machLoading  bool
-	machEditFile string // temp file path while editing
-	machEditMode bool   // waiting for apply confirmation
+	machVP         viewport.Model
+	machLoading    bool
+	machEditFile   string // temp file path while editing
+	machEditMode   bool   // waiting for apply confirmation
+	machFindQuery  string
+	machFindLines  []int  // line indices that match machFindQuery
+	machFindIdx    int    // current position in machFindLines
 
 	// Extensions
 	extensions []talos.Extension
