@@ -498,35 +498,67 @@ func (c *Client) Shutdown(ctx context.Context, node string) error {
 
 // --- Disks ---
 
+type diskEnvelope struct {
+	Metadata struct {
+		ID string `json:"id"`
+	} `json:"metadata"`
+	Spec struct {
+		DevPath    string `json:"dev_path"`
+		Model      string `json:"model"`
+		Serial     string `json:"serial"`
+		Type       string `json:"type"`
+		Size       uint64 `json:"size"`
+		SystemDisk bool   `json:"system_disk"`
+		Name       string `json:"name"`
+		Transport  string `json:"transport"`
+	} `json:"spec"`
+}
+
 func (c *Client) GetDisks(ctx context.Context, node string) ([]DiskInfo, error) {
-	data, err := c.run(ctx, "disks", "-n", node)
+	data, err := c.run(ctx, "get", "disks", "-n", node, "-o", "json")
+	if err != nil {
+		return nil, err
+	}
+	envs, err := parseJSONStream[diskEnvelope](data)
 	if err != nil {
 		return nil, err
 	}
 	var result []DiskInfo
-	for i, line := range strings.Split(string(data), "\n") {
-		if i == 0 || strings.TrimSpace(line) == "" {
+	for _, e := range envs {
+		if e.Metadata.ID == "" {
 			continue
 		}
-		f := strings.Fields(line)
-		// DEV MODEL SERIAL TYPE UUID WWID MODALIAS NAME SIZE_VAL SIZE_UNIT BUS_PATH
-		if len(f) < 5 {
-			continue
+		dev := e.Spec.DevPath
+		if dev == "" {
+			dev = "/dev/" + e.Metadata.ID
 		}
-		size := ""
-		// SIZE is 2 fields before BUS_PATH (last field)
-		if len(f) >= 3 {
-			size = f[len(f)-3] + " " + f[len(f)-2]
+		diskType := e.Spec.Type
+		if diskType == "" {
+			diskType = e.Spec.Transport
 		}
 		result = append(result, DiskInfo{
-			Dev:    f[0],
-			Model:  f[1],
-			Serial: f[2],
-			Type:   f[3],
-			Size:   size,
+			Dev:    dev,
+			Model:  e.Spec.Model,
+			Serial: e.Spec.Serial,
+			Type:   diskType,
+			Size:   formatBytes(e.Spec.Size),
 		})
 	}
 	return result, nil
+}
+
+// formatBytes converts a byte count to a compact human-readable string.
+func formatBytes(b uint64) string {
+	const unit = 1000
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := uint64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 // --- Processes ---
