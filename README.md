@@ -27,10 +27,45 @@ Built with Go, [bubbletea](https://github.com/charmbracelet/bubbletea) and [lipg
 
 ## Requirements
 
-- Go 1.22+
-- `talosctl` in `$PATH` — version should match your cluster
+- Go 1.22+ _(build from source only)_
+- `talosctl` **≥ 1.5** in `$PATH`
 - A valid talosconfig (`~/.talos/config` or `$TALOSCONFIG`)
-- `crane` in `$PATH` — only required for the extension catalog view
+- `crane` in `$PATH` — only required for the extension catalog view (`C`)
+
+### talosctl version compatibility
+
+| talosctl | Status |
+|----------|--------|
+| **1.5.x** | ✅ Minimum supported |
+| **1.6.x** | ✅ Tested |
+| **1.7.x** | ✅ Tested |
+| < 1.5 | ❌ `talosctl get disks` and `talosctl get extensions` not available |
+
+> **Note:** the talosctl client version should match your cluster version (±1 minor).
+> t9s warns you when they diverge.
+
+#### Commands used
+
+| Feature | Command | Available since |
+|---------|---------|-----------------|
+| Node list | `talosctl get members -o json` | 1.0 |
+| Services | `talosctl services` | 1.0 |
+| Logs | `talosctl logs -f` | 1.0 |
+| Dmesg | `talosctl dmesg -f` | 1.0 |
+| Machine config | `talosctl get machineconfig -o yaml` | 1.0 |
+| Edit config | `talosctl apply-config --mode auto` | 1.0 |
+| Patch config | `talosctl patch machineconfig --patch @file` | 1.2 |
+| Addresses | `talosctl get addresses -o json` | 1.2 |
+| Extensions | `talosctl get extensions -o json` | 1.3 |
+| K8s version | `talosctl get kubeletspec -o json` | 1.3 |
+| **Disks** | `talosctl get disks -o json` | **1.5** |
+| Processes | `talosctl processes` | 1.0 |
+| Containers | `talosctl containers` | 1.0 |
+| Stats | `talosctl stats` | 1.0 |
+| Health | `talosctl health` | 1.0 |
+| Upgrade Talos | `talosctl upgrade` | 1.0 |
+| Upgrade K8s | `talosctl upgrade-k8s` | 1.0 |
+| Reboot / Shutdown | `talosctl reboot / shutdown` | 1.0 |
 
 ---
 
