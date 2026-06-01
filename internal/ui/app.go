@@ -322,7 +322,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.statusMsg = errStyle.Render("Error: " + msg.err.Error())
 		} else {
 			app.machConf = msg.content
-			app.machSection = extractMachineSection(msg.content)
+			app.machSection = extractSpecContent(msg.content)
 			app.machVP.SetContent(app.machSection)
 			app.statusMsg = ""
 		}

@@ -377,56 +377,64 @@ func TestFilteredServicesEmptyList(t *testing.T) {
 	}
 }
 
-// ── extractMachineSection ─────────────────────────────────────────────────────
+// ── extractSpecContent ───────────────────────────────────────────────────────
 
-func TestExtractMachineSectionFromSpec(t *testing.T) {
+// The real talosctl output has spec: as a scalar string containing
+// the machine config YAML with escaped newlines.
+func TestExtractSpecContentScalarSpec(t *testing.T) {
+	// Mirrors the actual talosctl get machineconfig -o yaml structure.
+	raw := "node: 10.0.0.1\nmetadata:\n    namespace: config\nspec: \"version: v1alpha1\\ndebug: false\\nmachine:\\n    type: controlplane\\n    install:\\n        disk: /dev/sda\\ncluster:\\n    id: mycluster\\n\"\n"
+	got := extractSpecContent(raw)
+	if !strings.Contains(got, "version: v1alpha1") {
+		t.Error("output must contain version: v1alpha1")
+	}
+	if !strings.Contains(got, "machine:") {
+		t.Error("output must contain machine: key")
+	}
+	if !strings.Contains(got, "cluster:") {
+		t.Error("spec includes cluster: — it must be preserved")
+	}
+	if strings.Contains(got, "metadata:") {
+		t.Error("outer metadata must not appear")
+	}
+	if strings.Contains(got, "node:") {
+		t.Error("outer node field must not appear")
+	}
+}
+
+func TestExtractSpecContentMappingSpec(t *testing.T) {
+	// Fallback: spec is an inline YAML map (not a scalar string).
 	raw := `node: 10.0.0.1
 metadata:
     namespace: v1alpha1
 spec:
+    version: v1alpha1
     machine:
-        type: controlplane
-        install:
-            disk: /dev/sda
+        type: worker
     cluster:
-        id: test-cluster
+        id: test
 `
-	got := extractMachineSection(raw)
+	got := extractSpecContent(raw)
 	if !strings.Contains(got, "machine:") {
 		t.Error("output must contain machine: key")
 	}
-	if strings.Contains(got, "cluster:") {
-		t.Error("cluster: section must not appear in extracted output")
-	}
-	if strings.Contains(got, "metadata:") {
-		t.Error("metadata must not appear in extracted output")
-	}
-	if !strings.Contains(got, "controlplane") {
-		t.Error("machine type must be preserved")
+	if strings.Contains(got, "node:") {
+		t.Error("outer node field must not appear")
 	}
 }
 
-func TestExtractMachineSectionDirectKey(t *testing.T) {
-	raw := `machine:
-    type: worker
-    network:
-        hostname: talos-worker-01
-cluster:
-    id: mycluster
-`
-	got := extractMachineSection(raw)
-	if !strings.Contains(got, "machine:") {
-		t.Error("output must contain machine: key")
-	}
-	if strings.Contains(got, "cluster:") {
-		t.Error("cluster: must not appear")
-	}
-}
-
-func TestExtractMachineSectionFallbackOnInvalidYAML(t *testing.T) {
+func TestExtractSpecContentFallbackOnInvalidYAML(t *testing.T) {
 	raw := "not: valid: yaml: ::::"
-	got := extractMachineSection(raw)
+	got := extractSpecContent(raw)
 	if got != raw {
 		t.Error("invalid YAML must return raw content unchanged")
+	}
+}
+
+func TestExtractSpecContentNoSpec(t *testing.T) {
+	raw := "foo: bar\nbaz: qux\n"
+	got := extractSpecContent(raw)
+	if got != raw {
+		t.Error("no spec key: must return raw content unchanged")
 	}
 }
