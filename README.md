@@ -5,6 +5,8 @@
 A terminal UI for managing Talos Linux clusters, inspired by k9s.
 Built with Go, [bubbletea](https://github.com/charmbracelet/bubbletea) and [lipgloss](https://github.com/charmbracelet/lipgloss).
 
+<video src="assets/t9s.mp4" width="100%" autoplay loop muted playsinline></video>
+
 ---
 
 ## Features
