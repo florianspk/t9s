@@ -1,0 +1,19 @@
+scan:
+  # Scan Go module dependencies and look for hardcoded secrets
+  scanners:
+    - vuln
+    - secret
+
+vulnerability:
+  # Scan both OS packages and language-specific libraries (go.mod)
+  type:
+    - os
+    - library
+  # Only report vulnerabilities that have a fix available
+  ignore-unfixed: false
+
+# Skip generated files and test data
+skip-files:
+  - "**/*_test.go"
+  - "_out/**"
+  - "hack/**"
