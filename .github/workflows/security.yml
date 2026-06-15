@@ -55,7 +55,7 @@ jobs:
 
       # Full scan → SARIF (all severities, uploaded to GitHub Security tab)
       - name: Scan (SARIF)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -73,7 +73,7 @@ jobs:
 
       # Second pass → human-readable table, fails on CRITICAL/HIGH
       - name: Scan (table — fail on CRITICAL/HIGH)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
