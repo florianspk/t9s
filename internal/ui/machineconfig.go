@@ -240,7 +240,7 @@ func (app App) startMachineConfigEdit() (App, tea.Cmd) {
 		editor = "vi"
 	}
 
-	c := exec.Command(editor, app.machEditFile) //nolint:gosec
+	c := exec.Command(editor, app.machEditFile) // #nosec G204 G702 -- editor is $EDITOR env var, user-controlled intentionally
 	return app, tea.ExecProcess(c, func(err error) tea.Msg {
 		return editorDoneMsg{err: err}
 	})

@@ -153,7 +153,7 @@ func renderVolumeRow(v talos.VolumeInfo, width int) string {
 	var detail string
 	if v.Available > 0 {
 		used := v.Size - v.Available
-		pct := int(used * 100 / v.Size)
+		pct := int(float64(used) * 100 / float64(v.Size))
 		bar := usageBar(pct, 12)
 		detail = fmt.Sprintf("%s  %s / %s (%d%%)",
 			bar,
