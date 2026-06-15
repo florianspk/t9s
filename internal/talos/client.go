@@ -721,7 +721,7 @@ func (c *Client) GetAddresses(ctx context.Context, node string) ([]AddressInfo, 
 
 func (c *Client) StreamHealth(ctx context.Context, ch chan<- string) {
 	cmdArgs := append(c.baseArgs(), "health")
-	cmd := exec.CommandContext(ctx, "talosctl", cmdArgs...) // #nosec G204 -- binary is hardcoded
+	cmd := exec.CommandContext(ctx, "talosctl", cmdArgs...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		ch <- fmt.Sprintf("ERROR: %v", err)
@@ -755,7 +755,7 @@ func (c *Client) StreamHealth(ctx context.Context, ch chan<- string) {
 }
 
 func (c *Client) runStreaming(ctx context.Context, ch chan<- string, args ...string) error {
-	cmd := exec.CommandContext(ctx, "talosctl", args...) // #nosec G204 -- binary is hardcoded
+	cmd := exec.CommandContext(ctx, "talosctl", args...)
 	outR, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -838,7 +838,7 @@ func (c *Client) ApplyConfig(ctx context.Context, node, file string) error {
 		"--file", file,
 		"--mode", "auto",
 	)
-	out, err := exec.CommandContext(ctx, "talosctl", args...).CombinedOutput() // #nosec G204 -- binary is hardcoded
+	out, err := exec.CommandContext(ctx, "talosctl", args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
@@ -853,7 +853,7 @@ func (c *Client) PatchMachineConfig(ctx context.Context, node, file string) erro
 		"-n", node,
 		"--patch", "@"+file,
 	)
-	out, err := exec.CommandContext(ctx, "talosctl", args...).CombinedOutput() // #nosec G204 -- binary is hardcoded
+	out, err := exec.CommandContext(ctx, "talosctl", args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}

@@ -35,7 +35,7 @@ func Load(path string) (*TalosConfig, error) {
 		}
 	}
 
-	data, err := os.ReadFile(path) // #nosec G703 -- path is the user-supplied talosconfig flag, intentional
+	data, err := os.ReadFile(path) // #nosec G304 -- path is the user-supplied talosconfig flag, intentional
 	if err != nil {
 		return nil, fmt.Errorf("read talosconfig: %w", err)
 	}

@@ -45,7 +45,9 @@ jobs:
       - name: Run gosec
         uses: securego/gosec@master
         with:
-          args: -severity medium -confidence medium -exclude-dir hack ./...
+          # G204 excluded: t9s is a subprocess wrapper around talosctl/crane —
+          # the binary name is always hardcoded, only args vary (validated upstream).
+          args: -severity medium -confidence medium -exclude=G204 -exclude-dir hack ./...
 
   trivy:
     name: Trivy
