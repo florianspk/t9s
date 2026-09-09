@@ -89,9 +89,29 @@ func startHealth(app App) (App, tea.Cmd) {
 	client := app.client
 	ch := app.healthCh
 	ctx := app.healthCtx
+	node := app.healthNode()
 	go func() {
 		defer close(ch)
-		client.StreamHealth(ctx, ch)
+		client.StreamHealth(ctx, node, ch)
 	}()
 	return app, waitForHealthLine(app.healthCh)
+}
+
+// healthNode picks a single node to connect the health check to: the selected
+// node, else the first control-plane node, else the first known node.
+func (app App) healthNode() string {
+	if app.selNode != nil && app.selNode.IP != "" {
+		return app.selNode.IP
+	}
+	for _, n := range app.nodes {
+		if n.Role == "controlplane" && n.IP != "" {
+			return n.IP
+		}
+	}
+	for _, n := range app.nodes {
+		if n.IP != "" {
+			return n.IP
+		}
+	}
+	return ""
 }

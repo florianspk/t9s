@@ -719,8 +719,14 @@ func (c *Client) GetAddresses(ctx context.Context, node string) ([]AddressInfo, 
 
 // --- Health ---
 
-func (c *Client) StreamHealth(ctx context.Context, ch chan<- string) {
+// StreamHealth runs `talosctl health` connected to a single node (it discovers
+// the rest of the cluster itself). Passing every configured node makes talosctl
+// bail with "requires exactly one node".
+func (c *Client) StreamHealth(ctx context.Context, node string, ch chan<- string) {
 	cmdArgs := append(c.baseArgs(), "health")
+	if node != "" {
+		cmdArgs = append(cmdArgs, "-n", node)
+	}
 	cmd := exec.CommandContext(ctx, "talosctl", cmdArgs...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
