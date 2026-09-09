@@ -248,10 +248,10 @@ func TestNormalizeContainerStatus(t *testing.T) {
 		{"CONTAINER_EXITED", "STOPPED"},
 		{"SANDBOX_READY", "READY"},
 		{"SANDBOX_NOTREADY", "NOT_READY"},
-		{"RUNNING", "RUNNING"},   // already normalised
-		{"STOPPED", "STOPPED"},   // already normalised
-		{"UNKNOWN", "UNKNOWN"},   // pass-through
-		{"", ""},                 // empty
+		{"RUNNING", "RUNNING"}, // already normalised
+		{"STOPPED", "STOPPED"}, // already normalised
+		{"UNKNOWN", "UNKNOWN"}, // pass-through
+		{"", ""},               // empty
 	}
 	for _, tc := range cases {
 		if got := normalizeContainerStatus(tc.in); got != tc.want {
@@ -302,4 +302,106 @@ func stripLeadingV(s string) string {
 		return s[1:]
 	}
 	return s
+}
+
+// ── LVM status parsing (Talos 1.14, storage.talos.dev) ───────────────────────
+
+func TestParseLVMPhysicalVolumes(t *testing.T) {
+	data := []byte(`{
+  "metadata": {"id": "/dev/sdb1"},
+  "spec": {
+    "device": "/dev/sdb1",
+    "vgName": "vg0",
+    "allocatable": "allocatable",
+    "size": "42949672960",
+    "free": "12884901888",
+    "prettySize": "40 GiB",
+    "prettyFree": "12 GiB"
+  }
+}
+{
+  "metadata": {"id": "/dev/sdc"},
+  "spec": {"device": "/dev/sdc", "vgName": "", "size": "10737418240"}
+}`)
+	got, err := parseLVMPhysicalVolumes(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 PVs, got %d", len(got))
+	}
+	if got[0].Device != "/dev/sdb1" || got[0].VolumeGroup != "vg0" ||
+		got[0].Size != "40 GiB" || got[0].Free != "12 GiB" {
+		t.Errorf("PV[0] mismatch: %+v", got[0])
+	}
+	// No prettySize -> formatted from raw bytes.
+	if got[1].Size != "10.7 GB" {
+		t.Errorf("PV[1] size fallback: got %q want %q", got[1].Size, "10.7 GB")
+	}
+}
+
+func TestParseLVMVolumeGroups(t *testing.T) {
+	data := []byte(`{
+  "metadata": {"id": "vg0"},
+  "spec": {
+    "name": "vg0", "permissions": "writable",
+    "size": "42949672960", "free": "12884901888",
+    "pvCount": "2", "lvCount": "3",
+    "prettySize": "40 GiB", "prettyFree": "12 GiB"
+  }
+}`)
+	got, err := parseLVMVolumeGroups(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want 1 VG, got %d", len(got))
+	}
+	if got[0].Name != "vg0" || got[0].PVs != "2" || got[0].LVs != "3" ||
+		got[0].Size != "40 GiB" || got[0].Free != "12 GiB" {
+		t.Errorf("VG mismatch: %+v", got[0])
+	}
+}
+
+func TestParseLVMLogicalVolumes(t *testing.T) {
+	data := []byte(`{
+  "metadata": {"id": "vg0/data"},
+  "spec": {
+    "path": "/dev/vg0/data", "dmPath": "/dev/mapper/vg0-data",
+    "name": "data", "fullName": "vg0/data", "vgName": "vg0",
+    "layout": "linear", "active": "active",
+    "size": "30064771072", "prettySize": "28 GiB"
+  }
+}
+{
+  "metadata": {"id": "vg0/cache"},
+  "spec": {"name": "cache", "vgName": "vg0", "layout": "raid1", "active": "false", "size": "8589934592"}
+}`)
+	got, err := parseLVMLogicalVolumes(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 LVs, got %d", len(got))
+	}
+	if got[0].Name != "vg0/data" || got[0].VolumeGroup != "vg0" ||
+		got[0].Layout != "linear" || got[0].Size != "28 GiB" || got[0].Active != "active" {
+		t.Errorf("LV[0] mismatch: %+v", got[0])
+	}
+	// No fullName/path -> composed from vgName/name.
+	if got[1].Name != "vg0/cache" || got[1].Size != "8.6 GB" {
+		t.Errorf("LV[1] mismatch: %+v", got[1])
+	}
+}
+
+func TestParseLVMEmpty(t *testing.T) {
+	if pvs, err := parseLVMPhysicalVolumes([]byte("")); err != nil || len(pvs) != 0 {
+		t.Errorf("empty PV: %v %v", pvs, err)
+	}
+	if vgs, err := parseLVMVolumeGroups([]byte("")); err != nil || len(vgs) != 0 {
+		t.Errorf("empty VG: %v %v", vgs, err)
+	}
+	if lvs, err := parseLVMLogicalVolumes([]byte("")); err != nil || len(lvs) != 0 {
+		t.Errorf("empty LV: %v %v", lvs, err)
+	}
 }

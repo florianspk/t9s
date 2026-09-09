@@ -827,6 +827,225 @@ func (c *Client) GetVolumeStatus(ctx context.Context, node string) ([]VolumeInfo
 	return result, nil
 }
 
+// --- Generic resource browser ---
+
+// isUnknownResourceErr reports whether err is talosctl complaining that a
+// resource kind does not exist (older Talos, missing extension, typo).
+func isUnknownResourceErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "not registered") ||
+		strings.Contains(s, "unknown resource") ||
+		(strings.Contains(s, "resource") && strings.Contains(s, "not found") && strings.Contains(s, "definition"))
+}
+
+// ErrUnknownResource is returned by GetResourceTable / GetLVM* when the kind is
+// not known to the target Talos node.
+var ErrUnknownResource = fmt.Errorf("unknown resource")
+
+// GetResourceTable runs `talosctl get <kind>` with default table output and
+// returns the lines verbatim. Powers the ":" command palette fallback.
+func (c *Client) GetResourceTable(ctx context.Context, node, kind string) ([]string, error) {
+	args := []string{"get", kind}
+	if node != "" {
+		args = append(args, "-n", node)
+	}
+	data, err := c.run(ctx, args...)
+	if err != nil {
+		if isUnknownResourceErr(err) {
+			return nil, ErrUnknownResource
+		}
+		return nil, err
+	}
+	var lines []string
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		lines = append(lines, strings.TrimRight(sc.Text(), " \t"))
+	}
+	return lines, nil
+}
+
+// --- LVM (Talos 1.14, storage.talos.dev) ---
+//
+// JSON spec keys are the yaml tags of the machinery structs at
+// pkg/machinery/resources/storage/lvm_*_status.go (v1.14.0). Sizes are already
+// strings; prettySize/prettyFree are human-readable, size/free are raw bytes.
+
+type lvmPVEnvelope struct {
+	Metadata struct {
+		ID string `json:"id"`
+	} `json:"metadata"`
+	Spec struct {
+		Device      string `json:"device"`
+		VGName      string `json:"vgName"`
+		Allocatable string `json:"allocatable"`
+		InUse       string `json:"inUse"`
+		Size        string `json:"size"`
+		Free        string `json:"free"`
+		PrettySize  string `json:"prettySize"`
+		PrettyFree  string `json:"prettyFree"`
+	} `json:"spec"`
+}
+
+type lvmVGEnvelope struct {
+	Metadata struct {
+		ID string `json:"id"`
+	} `json:"metadata"`
+	Spec struct {
+		Name        string `json:"name"`
+		Permissions string `json:"permissions"`
+		Size        string `json:"size"`
+		Free        string `json:"free"`
+		PVCount     string `json:"pvCount"`
+		LVCount     string `json:"lvCount"`
+		PrettySize  string `json:"prettySize"`
+		PrettyFree  string `json:"prettyFree"`
+	} `json:"spec"`
+}
+
+type lvmLVEnvelope struct {
+	Metadata struct {
+		ID string `json:"id"`
+	} `json:"metadata"`
+	Spec struct {
+		Path       string `json:"path"`
+		DMPath     string `json:"dmPath"`
+		Name       string `json:"name"`
+		FullName   string `json:"fullName"`
+		VGName     string `json:"vgName"`
+		Layout     string `json:"layout"`
+		Active     string `json:"active"`
+		Size       string `json:"size"`
+		PrettySize string `json:"prettySize"`
+	} `json:"spec"`
+}
+
+func (c *Client) getLVMJSON(ctx context.Context, node, kind string) ([]byte, error) {
+	args := []string{"get", kind, "-o", "json"}
+	if node != "" {
+		args = append(args, "-n", node)
+	}
+	data, err := c.run(ctx, args...)
+	if err != nil {
+		if isUnknownResourceErr(err) {
+			return nil, ErrUnknownResource
+		}
+		return nil, err
+	}
+	return data, nil
+}
+
+func lvmPretty(pretty, raw string) string {
+	if pretty != "" {
+		return pretty
+	}
+	if raw == "" {
+		return ""
+	}
+	if n, err := strconv.ParseUint(raw, 10, 64); err == nil {
+		return FormatBytes(n)
+	}
+	return raw
+}
+
+func (c *Client) GetLVMPhysicalVolumes(ctx context.Context, node string) ([]LVMPhysicalVolume, error) {
+	data, err := c.getLVMJSON(ctx, node, "lvmphysicalvolumestatus")
+	if err != nil {
+		return nil, err
+	}
+	return parseLVMPhysicalVolumes(data)
+}
+
+func parseLVMPhysicalVolumes(data []byte) ([]LVMPhysicalVolume, error) {
+	envs, err := parseJSONStream[lvmPVEnvelope](data)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LVMPhysicalVolume, 0, len(envs))
+	for _, e := range envs {
+		dev := e.Spec.Device
+		if dev == "" {
+			dev = e.Metadata.ID
+		}
+		out = append(out, LVMPhysicalVolume{
+			Device:      dev,
+			VolumeGroup: e.Spec.VGName,
+			Size:        lvmPretty(e.Spec.PrettySize, e.Spec.Size),
+			Free:        lvmPretty(e.Spec.PrettyFree, e.Spec.Free),
+		})
+	}
+	return out, nil
+}
+
+func (c *Client) GetLVMVolumeGroups(ctx context.Context, node string) ([]LVMVolumeGroup, error) {
+	data, err := c.getLVMJSON(ctx, node, "lvmvolumegroupstatus")
+	if err != nil {
+		return nil, err
+	}
+	return parseLVMVolumeGroups(data)
+}
+
+func parseLVMVolumeGroups(data []byte) ([]LVMVolumeGroup, error) {
+	envs, err := parseJSONStream[lvmVGEnvelope](data)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LVMVolumeGroup, 0, len(envs))
+	for _, e := range envs {
+		name := e.Spec.Name
+		if name == "" {
+			name = e.Metadata.ID
+		}
+		out = append(out, LVMVolumeGroup{
+			Name: name,
+			Size: lvmPretty(e.Spec.PrettySize, e.Spec.Size),
+			Free: lvmPretty(e.Spec.PrettyFree, e.Spec.Free),
+			PVs:  e.Spec.PVCount,
+			LVs:  e.Spec.LVCount,
+		})
+	}
+	return out, nil
+}
+
+func (c *Client) GetLVMLogicalVolumes(ctx context.Context, node string) ([]LVMLogicalVolume, error) {
+	data, err := c.getLVMJSON(ctx, node, "lvmlogicalvolumestatus")
+	if err != nil {
+		return nil, err
+	}
+	return parseLVMLogicalVolumes(data)
+}
+
+func parseLVMLogicalVolumes(data []byte) ([]LVMLogicalVolume, error) {
+	envs, err := parseJSONStream[lvmLVEnvelope](data)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LVMLogicalVolume, 0, len(envs))
+	for _, e := range envs {
+		name := e.Spec.FullName
+		if name == "" {
+			name = e.Spec.Path
+		}
+		if name == "" && e.Spec.VGName != "" && e.Spec.Name != "" {
+			name = e.Spec.VGName + "/" + e.Spec.Name
+		}
+		if name == "" {
+			name = e.Metadata.ID
+		}
+		out = append(out, LVMLogicalVolume{
+			Name:        name,
+			VolumeGroup: e.Spec.VGName,
+			Layout:      e.Spec.Layout,
+			Size:        lvmPretty(e.Spec.PrettySize, e.Spec.Size),
+			Active:      e.Spec.Active,
+		})
+	}
+	return out, nil
+}
+
 // --- Machine config ---
 
 // ApplyConfig applies a full machine config file using talosctl apply-config.
