@@ -125,16 +125,15 @@ type App struct {
 	statsLoading bool
 
 	// Upgrade
-	upgradeInput    textinput.Model
-	upgradeLines    []string
-	upgradeCh       chan string
-	upgradeCtx      context.Context
-	upgradeCancel   context.CancelFunc
-	upgradeVP       viewport.Model
-	upgradeForK8s   bool
-	upgradePreserve bool
-	upgradeConfirm  bool
-	upgradeRunning  bool
+	upgradeInput   textinput.Model
+	upgradeLines   []string
+	upgradeCh      chan string
+	upgradeCtx     context.Context
+	upgradeCancel  context.CancelFunc
+	upgradeVP      viewport.Model
+	upgradeForK8s  bool
+	upgradeConfirm bool
+	upgradeRunning bool
 
 	// Context switcher
 	contexts []string

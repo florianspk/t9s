@@ -308,11 +308,8 @@ func (c *Client) StreamDmesg(ctx context.Context, node string, ch chan<- string)
 	cmd.Wait() //nolint:errcheck
 }
 
-func (c *Client) UpgradeTalos(ctx context.Context, node, image string, preserve bool, ch chan<- string) error {
+func (c *Client) UpgradeTalos(ctx context.Context, node, image string, ch chan<- string) error {
 	cmdArgs := append(c.baseArgs(), "upgrade", "-n", node, "--image", image)
-	if preserve {
-		cmdArgs = append(cmdArgs, "--preserve")
-	}
 	return c.runStreaming(ctx, ch, cmdArgs...)
 }
 

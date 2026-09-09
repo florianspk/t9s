@@ -102,7 +102,6 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		}
 		app.selNode = n
 		app.upgradeForK8s = false
-		app.upgradePreserve = true // default on: required for single-node etcd clusters
 		app.upgradeConfirm = false
 		app.upgradeRunning = false
 		app.upgradeLines = nil

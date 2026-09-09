@@ -143,7 +143,6 @@ func buildHelpContent() string {
 
 	sb.WriteString(section("Upgrade Talos (U)", [][2]string{
 		{"type", "Installer image, pre-filled with the node's version"},
-		{"p", "Toggle --preserve (keep data partition; on by default)"},
 		{"↵ then y", "Confirm and start; streams progress, node reboots"},
 		{"Esc", "Back (upgrade keeps running if already started)"},
 	}))
