@@ -132,6 +132,9 @@ func (app App) runCommand(raw string) (App, tea.Cmd) {
 	// --- fallback: generic Talos resource browser ---
 	app.resBrowserKind = tok
 	app.resBrowserLines, app.resBrowserErr, app.resBrowserLoad = nil, "", true
+	app.resBrowserYAML = false
+	app.resBrowserDetail, app.resBrowserDetailID = nil, ""
+	app.resBrowserDetailErr, app.resBrowserDetailLoad = "", false
 	app = app.goTo(StateResourceBrowser)
 	return app, app.loadResourceTable(tok)
 }

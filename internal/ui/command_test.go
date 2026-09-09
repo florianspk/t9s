@@ -65,3 +65,18 @@ func TestRunCommandNodeScopedWithoutNode(t *testing.T) {
 		t.Errorf("should not switch to Disks without a node")
 	}
 }
+
+func TestResourceRowKey(t *testing.T) {
+	const hdr = "NODE           NAMESPACE   TYPE          ID          VERSION   SOURCE"
+	node, id, ok := resourceRowKey(hdr, "10.17.84.213   runtime     MountStatus   EPHEMERAL   1         /dev/sda4")
+	if !ok || node != "10.17.84.213" || id != "EPHEMERAL" {
+		t.Errorf("got (%q, %q, %v)", node, id, ok)
+	}
+	// Not a `talosctl get` table (e.g. `talosctl mounts`, or YAML mode).
+	if _, _, ok := resourceRowKey("NODE  FILESYSTEM  SIZE(GB)", "10.0.0.1  none  4.08"); ok {
+		t.Error("non-resource table must not yield a key")
+	}
+	if _, _, ok := resourceRowKey(hdr, "10.17.84.213   runtime"); ok {
+		t.Error("short row must not yield a key")
+	}
+}

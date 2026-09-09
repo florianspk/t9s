@@ -61,6 +61,13 @@ type resourceTableMsg struct {
 	err   error
 }
 
+type resourceYAMLMsg struct {
+	kind  string
+	id    string
+	lines []string
+	err   error
+}
+
 type processesLoadedMsg struct {
 	processes []talos.ProcessInfo
 	err       error

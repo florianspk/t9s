@@ -9,6 +9,13 @@ type hint struct {
 	desc string
 }
 
+func yamlHint(app App) string {
+	if app.resBrowserYAML {
+		return "Table"
+	}
+	return "All YAML"
+}
+
 func wrapHint(app App) string {
 	if app.wrapMode {
 		return "Wrap [ON]"
@@ -87,9 +94,18 @@ func stateHints(app App) []hint {
 			{"Esc/q", "Back"},
 		}
 	case StateResourceBrowser:
+		if app.detailOpen() {
+			return []hint{
+				{"↑↓", "Scroll"},
+				{"g/G", "Top/Bottom"},
+				{"r", "Refresh"},
+				{"Esc/q", "Back to list"},
+			}
+		}
 		return []hint{
 			{"↑↓", "Scroll"},
-			{"PgUp/Dn", "Half page"},
+			{"↵", "Show YAML"},
+			{"y", yamlHint(app)},
 			{"g/G", "Top/Bottom"},
 			{"r", "Refresh"},
 			{"Esc/q", "Back"},

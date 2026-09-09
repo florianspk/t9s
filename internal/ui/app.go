@@ -165,6 +165,15 @@ type App struct {
 	resBrowserLines []string
 	resBrowserErr   string
 	resBrowserLoad  bool
+	resBrowserYAML  bool // whole listing rendered as YAML instead of a table
+
+	// Resource browser drill-in: one resource rendered as YAML
+	resBrowserDetail     []string
+	resBrowserDetailID   string
+	resBrowserDetailErr  string
+	resBrowserDetailLoad bool
+	resBrowserListScroll int // listing scroll stashed while the detail is open
+	resBrowserListStart  int
 
 	// Processes
 	processes   []talos.ProcessInfo
@@ -491,7 +500,27 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			app.resBrowserErr = ""
 			app.resBrowserLines = msg.lines
-			app.statusMsg = fmt.Sprintf("%s: %d rows", msg.kind, max(0, len(msg.lines)-1))
+			if app.resBrowserYAML {
+				app.statusMsg = fmt.Sprintf("%s: %d lines of YAML", msg.kind, len(msg.lines))
+			} else {
+				app.statusMsg = fmt.Sprintf("%s: %d rows", msg.kind, max(0, len(msg.lines)-1))
+			}
+		}
+		return app, nil
+
+	case resourceYAMLMsg:
+		app.resBrowserDetailLoad = false
+		if msg.err != nil {
+			if msg.err == talos.ErrUnknownResource {
+				app.resBrowserDetailErr = "unknown resource: " + msg.kind
+			} else {
+				app.resBrowserDetailErr = msg.err.Error()
+			}
+			app.resBrowserDetail = nil
+		} else {
+			app.resBrowserDetailErr = ""
+			app.resBrowserDetail = msg.lines
+			app.statusMsg = msg.kind + " / " + msg.id
 		}
 		return app, nil
 
@@ -1088,6 +1117,11 @@ func (app App) loadLVM() tea.Cmd {
 }
 
 func (app App) loadResourceTable(kind string) tea.Cmd {
+	return app.loadResourceListing(kind, false)
+}
+
+// loadResourceListing fetches the browser listing as a table or as YAML.
+func (app App) loadResourceListing(kind string, asYAML bool) tea.Cmd {
 	client := app.client
 	node := ""
 	if app.selNode != nil {
@@ -1096,8 +1130,31 @@ func (app App) loadResourceTable(kind string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		lines, err := client.GetResourceTable(ctx, node, kind)
+		var (
+			lines []string
+			err   error
+		)
+		if asYAML {
+			lines, err = client.GetResourceYAML(ctx, node, kind, "")
+		} else {
+			lines, err = client.GetResourceTable(ctx, node, kind)
+		}
 		return resourceTableMsg{kind: kind, lines: lines, err: err}
+	}
+}
+
+// loadResourceYAML fetches one resource for the browser's drill-in pane.
+// node may be empty to fall back to the selected node.
+func (app App) loadResourceYAML(kind, id, node string) tea.Cmd {
+	client := app.client
+	if node == "" && app.selNode != nil {
+		node = app.selNode.IP
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		lines, err := client.GetResourceYAML(ctx, node, kind, id)
+		return resourceYAMLMsg{kind: kind, id: id, lines: lines, err: err}
 	}
 }
 
