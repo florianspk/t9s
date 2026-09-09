@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -62,7 +61,7 @@ func (app App) renderServices(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Services on %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Services", len(app.services), 0, node)
 
 	if app.svcLoading && len(app.services) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
@@ -102,7 +101,7 @@ func (app App) renderServices(height int) string {
 		s := svcs[i]
 		selected := i == app.svcCur
 
-		id    := col(truncate(s.ID, colID), colID)
+		id := col(truncate(s.ID, colID), colID)
 		state := col(truncate(s.State, colState), colState)
 
 		cursor := "  "

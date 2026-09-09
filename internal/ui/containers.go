@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -53,7 +52,7 @@ func (app App) renderContainers(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Containers on %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Containers", len(app.containers), 0, node)
 
 	if app.contLoading && len(app.containers) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,

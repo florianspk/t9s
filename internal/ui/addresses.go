@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,7 +40,7 @@ func (app App) renderAddresses(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Network Addresses: %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Addresses", len(app.addresses), 0, node)
 
 	if app.addrLoading && len(app.addresses) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
@@ -58,7 +57,7 @@ func (app App) renderAddresses(height int) string {
 	)
 	// ADDRESS expands with terminal width; SCOPE gets the rest after fixed cols
 	// fixed overhead: cursor/indent(2) + colIface(14) + sep(2) + sep(2) + colFamily(8) + sep(2) = 30
-	colAddr := app.width/3
+	colAddr := app.width / 3
 	if colAddr < 22 {
 		colAddr = 22
 	}

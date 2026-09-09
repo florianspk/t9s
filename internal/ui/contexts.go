@@ -47,7 +47,7 @@ func (app App) handleContextsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		return app, app.loadNodes()
 
 	case "esc", "q":
-		app.state = app.prev
+		app = app.goBack()
 	}
 	return app, nil
 }

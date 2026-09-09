@@ -36,6 +36,8 @@ const (
 	StateAddresses
 	StateHealth
 	StateHelp
+	StateLVM
+	StateResourceBrowser
 )
 
 const (
@@ -53,11 +55,14 @@ type App struct {
 	client   *talos.Client
 
 	state AppState
-	prev  AppState
 
-	statusMsg  string
-	clientVer  string // talosctl binary version
-	serverVer  string // Talos server version (from first node)
+	// navStack is the breadcrumb / history stack. goTo pushes the current
+	// {state, node}; goBack pops it. Replaces the old single-level app.prev.
+	navStack []navEntry
+
+	statusMsg   string
+	clientVer   string // talosctl binary version
+	serverVer   string // Talos server version (from first node)
 	verMismatch string // non-empty when client/server versions diverge
 
 	// Node list
@@ -69,29 +74,29 @@ type App struct {
 	selNode *talos.Node
 
 	// Services
-	services    []talos.Service
-	svcCur      int
-	svcLoading  bool
+	services   []talos.Service
+	svcCur     int
+	svcLoading bool
 
 	// Logs
-	logLines    []string
-	logCh       chan string
-	logCtx      context.Context
-	logCancel   context.CancelFunc
-	logVP       viewport.Model
-	logService  string
+	logLines     []string
+	logCh        chan string
+	logCtx       context.Context
+	logCancel    context.CancelFunc
+	logVP        viewport.Model
+	logService   string
 	logStreaming bool
 
 	// Machine config
-	machConf     string // raw full YAML from talosctl
-	machSection  string // extracted "machine:" section shown in UI
-	machVP         viewport.Model
-	machLoading    bool
-	machEditFile   string // temp file path while editing
-	machEditMode   bool   // waiting for apply confirmation
-	machFindQuery  string
-	machFindLines  []int  // line indices that match machFindQuery
-	machFindIdx    int    // current position in machFindLines
+	machConf      string // raw full YAML from talosctl
+	machSection   string // extracted "machine:" section shown in UI
+	machVP        viewport.Model
+	machLoading   bool
+	machEditFile  string // temp file path while editing
+	machEditMode  bool   // waiting for apply confirmation
+	machFindQuery string
+	machFindLines []int // line indices that match machFindQuery
+	machFindIdx   int   // current position in machFindLines
 
 	// Extensions
 	extensions []talos.Extension
@@ -105,11 +110,11 @@ type App struct {
 	catalogVersion string
 
 	// Dmesg
-	dmesgLines    []string
-	dmesgCh       chan string
-	dmesgCtx      context.Context
-	dmesgCancel   context.CancelFunc
-	dmesgVP       viewport.Model
+	dmesgLines     []string
+	dmesgCh        chan string
+	dmesgCtx       context.Context
+	dmesgCancel    context.CancelFunc
+	dmesgVP        viewport.Model
 	dmesgStreaming bool
 
 	// Metrics
@@ -120,12 +125,12 @@ type App struct {
 	statsLoading bool
 
 	// Upgrade
-	upgradeInput   textinput.Model
-	upgradeLines   []string
-	upgradeCh      chan string
-	upgradeCtx     context.Context
-	upgradeCancel  context.CancelFunc
-	upgradeVP      viewport.Model
+	upgradeInput    textinput.Model
+	upgradeLines    []string
+	upgradeCh       chan string
+	upgradeCtx      context.Context
+	upgradeCancel   context.CancelFunc
+	upgradeVP       viewport.Model
 	upgradeForK8s   bool
 	upgradePreserve bool
 	upgradeConfirm  bool
@@ -144,6 +149,24 @@ type App struct {
 	diskLoading bool
 	volumes     []talos.VolumeInfo // loaded alongside disks
 
+	// LVM (dedicated :lvm view + disk-view annotation)
+	lvmPVs  []talos.LVMPhysicalVolume
+	lvmVGs  []talos.LVMVolumeGroup
+	lvmLVs  []talos.LVMLogicalVolume
+	lvmErr  error
+	lvmLoad bool
+
+	// Command palette (":")
+	cmdInput  textinput.Model
+	cmdActive bool
+	cmdErr    string
+
+	// Generic resource browser (":<talos resource>")
+	resBrowserKind  string
+	resBrowserLines []string
+	resBrowserErr   string
+	resBrowserLoad  bool
+
 	// Processes
 	processes   []talos.ProcessInfo
 	procLoading bool
@@ -158,11 +181,11 @@ type App struct {
 	addrLoading bool
 
 	// Health
-	healthLines    []string
-	healthCh       chan string
-	healthCtx      context.Context
-	healthCancel   context.CancelFunc
-	healthVP       viewport.Model
+	healthLines     []string
+	healthCh        chan string
+	healthCtx       context.Context
+	healthCancel    context.CancelFunc
+	healthVP        viewport.Model
 	healthStreaming bool
 
 	// Help
@@ -213,6 +236,11 @@ func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 	fi.CharLimit = 100
 	fi.Prompt = ""
 
+	ci := textinput.New()
+	ci.Placeholder = "nodes, health, lvm, mounts, routes…"
+	ci.CharLimit = 100
+	ci.Prompt = ""
+
 	return App{
 		cfg:          cfg,
 		cfgPath:      cfgPath,
@@ -222,13 +250,14 @@ func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 		upgradeInput: ti,
 		searchInput:  si,
 		findInput:    fi,
+		cmdInput:     ci,
 		contexts:     cfg.ContextNames(),
-		logVP:     viewport.New(80, 20),
-		dmesgVP:   viewport.New(80, 20),
-		machVP:    viewport.New(80, 20),
-		upgradeVP: viewport.New(80, 20),
-		healthVP:  viewport.New(80, 20),
-		helpVP:    viewport.New(80, 20),
+		logVP:        viewport.New(80, 20),
+		dmesgVP:      viewport.New(80, 20),
+		machVP:       viewport.New(80, 20),
+		upgradeVP:    viewport.New(80, 20),
+		healthVP:     viewport.New(80, 20),
+		helpVP:       viewport.New(80, 20),
 	}
 }
 
@@ -685,7 +714,7 @@ func (app App) renderHeader() string {
 
 	topBar := left + fill + right
 
-	resource := dimStyle.Render("  " + resourceLine(app))
+	resource := app.renderCrumbs() + "  " + dimStyle.Render(resourceLine(app))
 	hints := app.renderHintsPanel()
 	sepLine := strings.Repeat("─", app.width)
 
@@ -755,54 +784,104 @@ func resourceLine(app App) string {
 		}
 	case StateUpgradeK8s:
 		return "Upgrade Kubernetes"
+	case StateLVM:
+		if app.selNode != nil {
+			return fmt.Sprintf("LVM › %s", app.selNode.Hostname)
+		}
+	case StateResourceBrowser:
+		if app.selNode != nil {
+			return fmt.Sprintf("%s › %s", app.resBrowserKind, app.selNode.Hostname)
+		}
+		return app.resBrowserKind
 	case StateContextSwitcher:
 		return fmt.Sprintf("Contexts (%d)", len(app.contexts))
 	}
 	return ""
 }
 
-func viewTitle(s AppState) string {
+// renderCrumbs draws the k9s-style breadcrumb chips for the nav stack.
+func (app App) renderCrumbs() string {
+	cr := app.crumbs()
+	active := lipgloss.NewStyle().Background(colorBgSel).Foreground(colorWhite).Bold(true)
+	past := lipgloss.NewStyle().Background(colorBgHead).Foreground(colorGray)
+	var sb strings.Builder
+	for i, c := range cr {
+		st := past
+		if i == len(cr)-1 {
+			st = active
+		}
+		sb.WriteString(" " + st.Render(" ‹"+c+"› "))
+	}
+	return sb.String()
+}
+
+// stateName is the short human label for a view, used by the header, the
+// bordered title bar and (lower-cased) the breadcrumb chips.
+func stateName(s AppState) string {
 	switch s {
 	case StateNodeList:
-		return "[ Nodes ]"
+		return "Nodes"
 	case StateServices:
-		return "[ Services ]"
+		return "Services"
 	case StateLogs:
-		return "[ Logs ]"
+		return "Logs"
 	case StateMachineConfig:
-		return "[ Machine Config ]"
+		return "Machine Config"
 	case StateExtensions:
-		return "[ Extensions ]"
+		return "Extensions"
 	case StateExtCatalog:
-		return "[ Ext Catalog ]"
+		return "Ext Catalog"
 	case StateDisks:
-		return "[ Disks ]"
+		return "Disks"
+	case StateLVM:
+		return "LVM"
+	case StateResourceBrowser:
+		return "Resource"
 	case StateProcesses:
-		return "[ Processes ]"
+		return "Processes"
 	case StateContainers:
-		return "[ Containers ]"
+		return "Containers"
 	case StateAddresses:
-		return "[ Addresses ]"
+		return "Addresses"
 	case StateHealth:
-		return "[ Health ]"
+		return "Health"
 	case StateHelp:
-		return "[ Help ]"
+		return "Help"
 	case StateDmesg:
-		return "[ Dmesg ]"
+		return "Dmesg"
 	case StateMetrics:
-		return "[ Metrics ]"
+		return "Metrics"
 	case StateUpgradeTalos:
-		return "[ Upgrade Talos ]"
+		return "Upgrade Talos"
 	case StateUpgradeK8s:
-		return "[ Upgrade K8s ]"
+		return "Upgrade K8s"
 	case StateContextSwitcher:
-		return "[ Contexts ]"
+		return "Contexts"
 	}
 	return ""
 }
 
+func viewTitle(s AppState) string {
+	if n := stateName(s); n != "" {
+		return "[ " + n + " ]"
+	}
+	return ""
+}
+
+// crumbLabel is the lower-cased, space-free breadcrumb form, e.g. "machineconfig".
+func crumbLabel(s AppState) string {
+	return strings.ToLower(strings.ReplaceAll(stateName(s), " ", ""))
+}
+
 func (app App) renderFooter() string {
 	sepLine := strings.Repeat("─", app.width)
+	if app.cmdActive {
+		bar := keyStyle.Render(":") + app.cmdInput.View()
+		if app.cmdErr != "" {
+			bar += "   " + errStyle.Render(app.cmdErr)
+		}
+		return sepLine + "\n  " + bar
+	}
 	if app.searchActive {
 		bar := dimStyle.Render("/") + app.searchInput.View()
 		return sepLine + "\n  " + bar
@@ -1209,8 +1288,36 @@ func clamp(v, lo, hi int) int {
 
 // --- Navigation helpers ---
 
+// navEntry is one frame of the breadcrumb / history stack.
+type navEntry struct {
+	state AppState
+	node  *talos.Node
+}
+
+const maxNavStack = 32
+
 func (app App) goTo(state AppState) App {
-	app.prev = app.state
+	switch {
+	case app.state == state:
+		// no-op re-entry: don't grow the stack
+	default:
+		// Navigating to a view already on the stack collapses the breadcrumb
+		// back to it (e.g. ":nodes" from deep in a drill-down) instead of
+		// stacking a duplicate.
+		if i := app.navIndex(state); i >= 0 {
+			app.selNode = app.navStack[i].node
+			app.navStack = app.navStack[:i]
+		} else {
+			node := app.selNode
+			if app.state == StateNodeList {
+				node = nil // the node list is always cluster-scoped
+			}
+			app.navStack = append(app.navStack, navEntry{state: app.state, node: node})
+			if len(app.navStack) > maxNavStack {
+				app.navStack = app.navStack[len(app.navStack)-maxNavStack:]
+			}
+		}
+	}
 	app.state = state
 	app.searchActive = false
 	app.searchInput.Reset()
@@ -1219,27 +1326,49 @@ func (app App) goTo(state AppState) App {
 	return app
 }
 
+// navIndex returns the stack position of the first frame for state, or -1.
+func (app App) navIndex(state AppState) int {
+	for i, e := range app.navStack {
+		if e.state == state {
+			return i
+		}
+	}
+	return -1
+}
+
 func (app App) goBack() App {
 	app.stopLogs()
 	app.stopDmesg()
 	app.stopHealth()
 	app.searchActive = false
 	app.searchInput.Reset()
-	switch app.state {
-	case StateLogs:
-		app.state = StateServices
-	case StateServices:
-		app.state = StateNodeList
-		app.selNode = nil
-	case StateExtCatalog:
-		app.state = app.prev
-	case StateHelp:
-		app.state = app.prev
-	default:
+	app.listScroll = 0
+	app.viewScrollStart = 0
+	if n := len(app.navStack); n > 0 {
+		e := app.navStack[n-1]
+		app.navStack = app.navStack[:n-1]
+		app.state = e.state
+		app.selNode = e.node
+	} else {
 		app.state = StateNodeList
 		app.selNode = nil
 	}
+	// The node list is always cluster-scoped; a stale selNode only mis-labels
+	// the header.
+	if app.state == StateNodeList {
+		app.selNode = nil
+	}
 	return app
+}
+
+// crumbs flattens the nav stack (plus the current view) into breadcrumb labels.
+func (app App) crumbs() []string {
+	out := make([]string, 0, len(app.navStack)+1)
+	for _, e := range app.navStack {
+		out = append(out, crumbLabel(e.state))
+	}
+	out = append(out, crumbLabel(app.state))
+	return out
 }
 
 func (app App) selectedNode() *talos.Node {

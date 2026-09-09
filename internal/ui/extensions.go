@@ -48,7 +48,7 @@ func (app App) renderExtensions(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Extensions on %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Extensions", len(app.extensions), 0, node)
 
 	if app.extLoading && len(app.extensions) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
