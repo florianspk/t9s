@@ -6,15 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-)
 
-// viewAliases are the palette entries that map to a t9s screen. Kept in the
-// order they are offered as completions; keep in sync with runCommand.
-var viewAliases = []string{
-	"nodes", "health", "disks", "lvm", "services", "extensions", "catalog",
-	"machineconfig", "metrics", "processes", "containers", "addresses",
-	"dmesg", "contexts", "df", "help", "quit",
-}
+	"github.com/florianspk/t9s/internal/talos"
+)
 
 // maxCmdMatches caps the completion strip so it stays on one line.
 const maxCmdMatches = 8
@@ -212,30 +206,37 @@ func (app App) handleCommandKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	}
 }
 
-// runCommand resolves a ":" palette entry: a known view alias jumps to that
-// view; anything else is treated as a Talos resource kind for the generic
-// browser.
-func (app App) runCommand(raw string) (App, tea.Cmd) {
-	tok := strings.ToLower(strings.Fields(raw)[0])
+// command is one palette entry. The first alias is the canonical name shown in
+// completions; run performs the jump (goTo plus whatever load it needs).
+type command struct {
+	aliases []string
+	node    bool // needs a target node
+	run     func(app App, node *talos.Node) (App, tea.Cmd)
+}
 
-	// --- cluster-scoped / special targets ---
-	switch tok {
-	case "q", "quit", "exit":
+// commands is the single source of truth for the palette: both runCommand and
+// the completion list are derived from it, so they cannot drift apart.
+var commands = []command{
+	{aliases: []string{"quit", "q", "exit"}, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.cleanup()
 		return app, tea.Quit
-	case "help", "?", "h":
+	}},
+	{aliases: []string{"help", "?", "h"}, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.helpVP.SetContent(buildHelpContent())
 		app.helpVP.GotoTop()
 		return app.goTo(StateHelp), nil
-	case "nodes", "node", "members", "member":
+	}},
+	{aliases: []string{"nodes", "node", "members", "member"}, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app = app.goTo(StateNodeList)
 		app.nodeLoading = true
 		return app, app.loadNodes()
-	case "health", "checks":
+	}},
+	{aliases: []string{"health", "checks"}, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.selNode = nil
 		app = app.goTo(StateHealth)
 		return startHealth(app)
-	case "ctx", "context", "contexts":
+	}},
+	{aliases: []string{"contexts", "ctx", "context"}, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.contexts = app.cfg.ContextNames()
 		app.ctxCur = 0
 		for i, c := range app.contexts {
@@ -245,76 +246,130 @@ func (app App) runCommand(raw string) (App, tea.Cmd) {
 			}
 		}
 		return app.goTo(StateContextSwitcher), nil
-	}
-
-	// --- node-scoped targets ---
-	node := app.selNode
-	if node == nil {
-		node = app.selectedNode()
-	}
-	if node == nil && len(app.nodes) > 0 {
-		n := app.nodes[0]
-		node = &n
-	}
-	if node == nil {
-		app.statusMsg = warnStyle.Render("select a node first (" + tok + ")")
-		return app, nil
-	}
-	app.selNode = node
-
-	switch tok {
-	case "svc", "service", "services":
+	}},
+	{aliases: []string{"services", "svc", "service"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.services, app.svcLoading = nil, true
 		app = app.goTo(StateServices)
 		return app, app.loadServices()
-	case "ext", "extension", "extensions":
+	}},
+	{aliases: []string{"extensions", "ext", "extension"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.extensions, app.extLoading = nil, true
 		app = app.goTo(StateExtensions)
 		return app, app.loadExtensions()
-	case "catalog", "extcatalog":
+	}},
+	{aliases: []string{"catalog", "extcatalog"}, node: true, run: func(app App, node *talos.Node) (App, tea.Cmd) {
 		app.catalog, app.catalogCur, app.catalogLoading = nil, 0, true
 		app.catalogVersion = node.Version
 		app = app.goTo(StateExtCatalog)
 		return app, app.loadCatalog()
-	case "mc", "machineconfig", "config":
+	}},
+	{aliases: []string{"machineconfig", "mc", "config"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.machConf, app.machLoading = "", true
 		app = app.goTo(StateMachineConfig)
 		return app, app.loadMachineConfig()
-	case "disks", "disk":
+	}},
+	{aliases: []string{"disks", "disk"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.disks, app.diskLoading, app.volumes = nil, true, nil
-		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err = nil, nil, nil, nil
+		app.lvm = lvmState{load: true}
 		app = app.goTo(StateDisks)
 		return app, tea.Batch(app.loadDisks(), app.loadVolumes(), app.loadLVM())
-	case "lvm", "pvs", "vgs", "lvs":
-		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err, app.lvm.load = nil, nil, nil, nil, true
+	}},
+	{aliases: []string{"lvm", "pvs", "vgs", "lvs"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
+		app.lvm = lvmState{load: true}
 		app = app.goTo(StateLVM)
 		return app, app.loadLVM()
-	case "metrics", "stats", "top":
+	}},
+	{aliases: []string{"metrics", "stats", "top"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.stats, app.statsLoading = nil, true
 		app = app.goTo(StateMetrics)
 		return app, app.loadStats()
-	case "procs", "ps", "processes", "process":
+	}},
+	{aliases: []string{"processes", "procs", "ps", "process"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.processes, app.procLoading = nil, true
 		app = app.goTo(StateProcesses)
 		return app, app.loadProcesses()
-	case "containers", "container", "pods":
+	}},
+	{aliases: []string{"containers", "container", "pods"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.containers, app.contLoading = nil, true
 		app = app.goTo(StateContainers)
 		return app, app.loadContainers()
-	case "addr", "addrs", "addresses", "ip":
+	}},
+	{aliases: []string{"addresses", "addr", "addrs", "ip"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		app.addresses, app.addrLoading = nil, true
 		app = app.goTo(StateAddresses)
 		return app, app.loadAddresses()
-	case "dmesg", "kernel":
+	}},
+	{aliases: []string{"dmesg", "kernel"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
 		return startDmesg(app)
+	}},
+	// Not a COSI resource — see pseudoKinds.
+	{aliases: []string{"df"}, node: true, run: func(app App, _ *talos.Node) (App, tea.Cmd) {
+		return app.openResourceBrowser("df")
+	}},
+}
+
+// commandIndex maps every alias to its command; built once at init.
+var commandIndex = func() map[string]*command {
+	m := make(map[string]*command, len(commands)*3)
+	for i := range commands {
+		for _, a := range commands[i].aliases {
+			m[a] = &commands[i]
+		}
+	}
+	return m
+}()
+
+// viewAliases are the canonical names offered as completions.
+var viewAliases = func() []string {
+	out := make([]string, 0, len(commands))
+	for _, c := range commands {
+		out = append(out, c.aliases[0])
+	}
+	return out
+}()
+
+// runCommand resolves a ":" palette entry: a known alias jumps to that view,
+// anything else is treated as a Talos resource kind for the generic browser.
+func (app App) runCommand(raw string) (App, tea.Cmd) {
+	tok := strings.ToLower(strings.Fields(raw)[0])
+
+	cmd, known := commandIndex[tok]
+	if !known {
+		return app.openResourceBrowser(tok)
 	}
 
-	// --- fallback: generic Talos resource browser ---
-	app.browser.kind = tok
-	app.browser.lines, app.browser.err, app.browser.load = nil, "", true
-	app.browser.yaml = false
-	app.browser.detail, app.browser.detailID = nil, ""
-	app.browser.detailErr, app.browser.detailLoad = "", false
+	var node *talos.Node
+	if cmd.node {
+		node = app.targetNode()
+		if node == nil {
+			app.statusMsg = warnStyle.Render("select a node first (" + tok + ")")
+			return app, nil
+		}
+		app.selNode = node
+	}
+	return cmd.run(app, node)
+}
+
+// targetNode is the node a node-scoped command acts on: the one already
+// selected, else the highlighted row, else the first known node.
+func (app App) targetNode() *talos.Node {
+	if app.selNode != nil {
+		return app.selNode
+	}
+	if n := app.selectedNode(); n != nil {
+		return n
+	}
+	if len(app.nodes) > 0 {
+		n := app.nodes[0]
+		return &n
+	}
+	return nil
+}
+
+// openResourceBrowser shows `talosctl get <kind>` (or a pseudo-kind) in the
+// generic browser.
+func (app App) openResourceBrowser(kind string) (App, tea.Cmd) {
+	app.browser = resourceBrowser{kind: kind, load: true}
 	app = app.goTo(StateResourceBrowser)
-	return app, app.loadResourceTable(tok)
+	return app, app.loadResourceTable(kind)
 }

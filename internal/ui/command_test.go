@@ -133,3 +133,34 @@ func TestIsSubsequence(t *testing.T) {
 		}
 	}
 }
+
+// The completion list is derived from the command table, so an alias can never
+// be offered without a handler behind it.
+func TestCommandTableIsConsistent(t *testing.T) {
+	for _, a := range viewAliases {
+		if _, ok := commandIndex[a]; !ok {
+			t.Errorf("completion offers %q with no command behind it", a)
+		}
+	}
+	seen := map[string]string{}
+	for _, c := range commands {
+		if len(c.aliases) == 0 {
+			t.Fatal("command with no aliases")
+		}
+		if c.run == nil {
+			t.Errorf("%q has no run func", c.aliases[0])
+		}
+		for _, a := range c.aliases {
+			if prev, dup := seen[a]; dup {
+				t.Errorf("alias %q claimed by both %q and %q", a, prev, c.aliases[0])
+			}
+			seen[a] = c.aliases[0]
+		}
+	}
+	// Every pseudo-kind must be reachable from the palette.
+	for k := range pseudoKinds {
+		if _, ok := commandIndex[k]; !ok {
+			t.Errorf("pseudo-kind %q is not in the command table", k)
+		}
+	}
+}
