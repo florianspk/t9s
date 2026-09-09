@@ -156,9 +156,12 @@ type App struct {
 	lvmLoad bool
 
 	// Command palette (":")
-	cmdInput  textinput.Model
-	cmdActive bool
-	cmdErr    string
+	cmdInput    textinput.Model
+	cmdActive   bool
+	cmdErr      string
+	cmdKinds    []string // resource names/aliases from `talosctl get rd`, for completion
+	cmdMatches  []string // completions for the current input
+	cmdMatchIdx int
 
 	// Generic resource browser (":<talos resource>")
 	resBrowserKind  string
@@ -508,6 +511,15 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return app, nil
 
+	case resourceKindsMsg:
+		if msg.err == nil {
+			app.cmdKinds = msg.kinds
+			if app.cmdActive {
+				app = app.refreshCmdMatches()
+			}
+		}
+		return app, nil
+
 	case resourceYAMLMsg:
 		app.resBrowserDetailLoad = false
 		if msg.err != nil {
@@ -725,8 +737,16 @@ func (app App) headerHeight() int {
 	return headerBaseH + app.hintsHeight()
 }
 
+// footerHeight is footerH plus one line for the command-palette completions.
+func (app App) footerHeight() int {
+	if app.cmdActive && len(app.cmdMatches) > 0 {
+		return footerH + 1
+	}
+	return footerH
+}
+
 func (app App) mainHeight() int {
-	h := app.height - app.headerHeight() - footerH
+	h := app.height - app.headerHeight() - app.footerHeight()
 	if h < 1 {
 		h = 1
 	}
@@ -937,7 +957,11 @@ func (app App) renderFooter() string {
 		if app.cmdErr != "" {
 			bar += "   " + errStyle.Render(app.cmdErr)
 		}
-		return sepLine + "\n  " + bar
+		out := sepLine + "\n  " + bar
+		if m := app.renderCmdMatches(); m != "" {
+			out += "\n  " + m
+		}
+		return out
 	}
 	if app.searchActive {
 		bar := dimStyle.Render("/") + app.searchInput.View()
@@ -1140,6 +1164,24 @@ func (app App) loadResourceListing(kind string, asYAML bool) tea.Cmd {
 			lines, err = client.GetResourceTable(ctx, node, kind)
 		}
 		return resourceTableMsg{kind: kind, lines: lines, err: err}
+	}
+}
+
+// loadResourceKinds caches every resource name/alias the cluster knows so the
+// command palette can complete them. Fetched once, on first ":" press.
+func (app App) loadResourceKinds() tea.Cmd {
+	client := app.client
+	node := ""
+	if app.selNode != nil {
+		node = app.selNode.IP
+	} else if len(app.nodes) > 0 {
+		node = app.nodes[0].IP
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		kinds, err := client.GetResourceKinds(ctx, node)
+		return resourceKindsMsg{kinds: kinds, err: err}
 	}
 }
 

@@ -80,3 +80,56 @@ func TestResourceRowKey(t *testing.T) {
 		t.Error("short row must not yield a key")
 	}
 }
+
+func TestMatchCommands(t *testing.T) {
+	// "environment" is a tighter m-n-t subsequence than "mounts", but only
+	// "mounts" starts with the query's first letter — that must win.
+	kinds := []string{"environment", "mounts", "mountstatus", "ms", "routes", "members", "disks"}
+	cases := []struct {
+		in   string
+		want string // expected first match
+	}{
+		{"nodes", "nodes"},  // exact view alias
+		{"disk", "disks"},   // prefix, view alias wins
+		{"mount", "mounts"}, // prefix on a resource kind
+		{"mnt", "mounts"},   // subsequence abbreviation
+		{"hea", "health"},   // prefix on a view alias
+		{"route", "routes"}, // singular -> plural by prefix
+	}
+	for _, tc := range cases {
+		got := matchCommands(tc.in, kinds)
+		if len(got) == 0 {
+			t.Errorf("matchCommands(%q) = no matches", tc.in)
+			continue
+		}
+		if got[0] != tc.want {
+			t.Errorf("matchCommands(%q)[0] = %q, want %q (all: %v)", tc.in, got[0], tc.want, got)
+		}
+	}
+	if got := matchCommands("", kinds); got != nil {
+		t.Errorf("empty prefix must not match, got %v", got)
+	}
+	if got := matchCommands("zzzqqq", kinds); len(got) != 0 {
+		t.Errorf("nonsense prefix matched %v", got)
+	}
+	if got := matchCommands("s", kinds); len(got) > maxCmdMatches {
+		t.Errorf("matches not capped: %d", len(got))
+	}
+}
+
+func TestIsSubsequence(t *testing.T) {
+	for _, tc := range []struct {
+		short, long string
+		want        bool
+	}{
+		{"mnt", "mounts", true},
+		{"ms", "mountstatus", true},
+		{"tsm", "mounts", false},
+		{"", "mounts", true},
+		{"mounts", "mnt", false},
+	} {
+		if got := isSubsequence(tc.short, tc.long); got != tc.want {
+			t.Errorf("isSubsequence(%q, %q) = %v, want %v", tc.short, tc.long, got, tc.want)
+		}
+	}
+}

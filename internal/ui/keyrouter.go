@@ -54,11 +54,17 @@ func (app App) handleKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		!app.upgradeRunning {
 		app.cmdActive = true
 		app.cmdErr = ""
+		app.cmdMatchIdx = 0
 		app.cmdInput.Reset()
 		if len(s) > 1 {
 			app.cmdInput.SetValue(s[1:])
 		}
-		return app, app.cmdInput.Focus()
+		app = app.refreshCmdMatches()
+		cmds := []tea.Cmd{app.cmdInput.Focus()}
+		if app.cmdKinds == nil {
+			cmds = append(cmds, app.loadResourceKinds())
+		}
+		return app, tea.Batch(cmds...)
 	}
 
 	// Global search: activate on '/' for list-based views

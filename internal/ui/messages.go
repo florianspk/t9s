@@ -61,6 +61,11 @@ type resourceTableMsg struct {
 	err   error
 }
 
+type resourceKindsMsg struct {
+	kinds []string
+	err   error
+}
+
 type resourceYAMLMsg struct {
 	kind  string
 	id    string
