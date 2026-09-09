@@ -1,0 +1,48 @@
+# Maintainer: Florian Specker <florianspk@gmail.com>
+
+pkgname=t9s
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='k9s-inspired terminal UI for managing Talos Linux clusters'
+arch=('x86_64' 'aarch64')
+url='https://github.com/florianspk/t9s'
+license=('LicenseRef-t9s-non-commercial')
+depends=('glibc')
+makedepends=('go')
+optdepends=(
+  'talosctl: required at runtime — t9s drives it to talk to Talos nodes'
+  'crane: browse the Siderolabs extension catalog'
+)
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# Run `updpkgsums` after bumping pkgver to replace this with the real checksum.
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  go mod download
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export CGO_CPPFLAGS="${CPPFLAGS}"
+  export CGO_CFLAGS="${CFLAGS}"
+  export CGO_CXXFLAGS="${CXXFLAGS}"
+  export CGO_LDFLAGS="${LDFLAGS}"
+  export GOFLAGS='-buildmode=pie -trimpath -mod=readonly -modcacherw'
+
+  go build -o build/t9s \
+    -ldflags "-linkmode=external -compressdwarf=false -X main.version=v$pkgver" \
+    ./cmd/main.go
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  go test ./...
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 build/t9s "$pkgdir/usr/bin/t9s"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
