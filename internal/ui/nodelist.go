@@ -184,7 +184,8 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app.diskLoading = true
 		app = app.goTo(StateDisks)
 		app.volumes = nil
-		return app, tea.Batch(app.loadDisks(), app.loadVolumes())
+		app.lvmPVs, app.lvmVGs, app.lvmLVs, app.lvmErr = nil, nil, nil, nil
+		return app, tea.Batch(app.loadDisks(), app.loadVolumes(), app.loadLVM())
 
 	case "H":
 		app.selNode = app.selectedNode()
@@ -290,12 +291,12 @@ func (app App) renderNodeList(height int) string {
 		}
 
 		// Apply semantic colors to plain-padded strings
-		roleColored   := colorRole(role)
-		verColored    := dimStyle.Render(ver)
+		roleColored := colorRole(role)
+		verColored := dimStyle.Render(ver)
 		statusColored := colorNodeStatus(n.Status)
 		if selected {
-			roleColored   = role
-			verColored    = ver
+			roleColored = role
+			verColored = ver
 			statusColored = n.Status
 		}
 

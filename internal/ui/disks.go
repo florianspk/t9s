@@ -30,7 +30,8 @@ func (app App) handleDisksKey(msg tea.KeyMsg) (App, tea.Cmd) {
 			app.diskLoading = true
 			app.listScroll = 0
 			app.volumes = nil
-			return app, tea.Batch(app.loadDisks(), app.loadVolumes())
+			app.lvmPVs, app.lvmVGs, app.lvmLVs, app.lvmErr = nil, nil, nil, nil
+			return app, tea.Batch(app.loadDisks(), app.loadVolumes(), app.loadLVM())
 		}
 	case "esc", "q":
 		app = app.goBack()
@@ -43,7 +44,7 @@ func (app App) renderDisks(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Disks on %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Disks", len(app.disks), 0, node)
 
 	if app.diskLoading && len(app.disks) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
@@ -86,6 +87,13 @@ func (app App) renderDisks(height int) string {
 		if v.DiskID != "" {
 			volsByDisk[v.DiskID] = append(volsByDisk[v.DiskID], v)
 		}
+	}
+
+	// Index LVM physical volumes by their device basename (e.g. "sdb", "sdb1")
+	// so we can annotate the disk (or one of its partitions) that backs a VG.
+	pvByDev := make(map[string]talos.LVMPhysicalVolume)
+	for _, pv := range app.lvmPVs {
+		pvByDev[strings.TrimPrefix(pv.Device, "/dev/")] = pv
 	}
 
 	maxRows := height - 3
@@ -132,8 +140,80 @@ func (app App) renderDisks(height int) string {
 			sb.WriteByte('\n')
 			rowsLeft--
 		}
+
+		// LVM physical-volume markers: the whole disk, or any of its partitions.
+		for dev, pv := range pvByDev {
+			if rowsLeft <= 0 {
+				break
+			}
+			if dev != diskKey && !strings.HasPrefix(dev, diskKey) {
+				continue
+			}
+			vg := pv.VolumeGroup
+			if vg == "" {
+				vg = "(unassigned)"
+			}
+			line := dimStyle.Render(fmt.Sprintf("    └─ PV %s → VG %s", dev, vg))
+			if pv.Free != "" {
+				line += dimStyle.Render(fmt.Sprintf("   %s free / %s", pv.Free, pv.Size))
+			}
+			sb.WriteString(line)
+			sb.WriteByte('\n')
+			rowsLeft--
+		}
+	}
+
+	// LVM section: volume groups and their logical volumes.
+	if rowsLeft > 0 && (len(app.lvmVGs) > 0 || len(app.lvmLVs) > 0) {
+		sb.WriteString(dimStyle.Render(strings.Repeat("─", min(app.width, 40))))
+		sb.WriteByte('\n')
+		rowsLeft--
+
+		lvsByVG := make(map[string][]talos.LVMLogicalVolume)
+		for _, lv := range app.lvmLVs {
+			lvsByVG[lv.VolumeGroup] = append(lvsByVG[lv.VolumeGroup], lv)
+		}
+
+		for _, vg := range app.lvmVGs {
+			if rowsLeft <= 0 {
+				break
+			}
+			sb.WriteString(colHeaderStyle.Render("  VG ") +
+				titleStyle.Render(truncate(vg.Name, max(8, app.width/3))) +
+				dimStyle.Render(fmt.Sprintf("   %s PV · %s free / %s", nz(vg.PVs), nz(vg.Free), nz(vg.Size))))
+			sb.WriteByte('\n')
+			rowsLeft--
+
+			lvName := min(48, max(16, app.width/2))
+			for _, lv := range lvsByVG[vg.Name] {
+				if rowsLeft <= 0 {
+					break
+				}
+				active := okStyle.Render("●")
+				if strings.EqualFold(lv.Active, "false") || lv.Active == "" {
+					active = dimStyle.Render("○")
+				}
+				// The VG is already the section header — drop the "<vg>/" prefix.
+				name := strings.TrimPrefix(lv.Name, vg.Name+"/")
+				sb.WriteString(fmt.Sprintf("    %s %s  %s  %s",
+					active,
+					col(truncate(name, lvName), lvName),
+					col(nz(lv.Layout), 8),
+					infoStyle.Render(lv.Size)))
+				sb.WriteByte('\n')
+				rowsLeft--
+			}
+		}
 	}
 	return sb.String()
+}
+
+// nz returns "—" for an empty string.
+func nz(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
 }
 
 // renderVolumeRow renders one volume as an indented sub-row.

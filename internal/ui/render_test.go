@@ -528,3 +528,71 @@ func TestRenderServicesNoLineExceedsWidth(t *testing.T) {
 		})
 	}
 }
+
+// ── LVM view ─────────────────────────────────────────────────────────────────
+
+func makeLVM() ([]talos.LVMPhysicalVolume, []talos.LVMVolumeGroup, []talos.LVMLogicalVolume) {
+	pvs := []talos.LVMPhysicalVolume{
+		{Device: "/dev/sdb1", VolumeGroup: "vg0", Size: "40 GiB", Free: "12 GiB"},
+		{Device: "/dev/sdc", VolumeGroup: "vg0", Size: "40 GiB", Free: "40 GiB"},
+	}
+	vgs := []talos.LVMVolumeGroup{{Name: "vg0", Size: "80 GiB", Free: "52 GiB", PVs: "2", LVs: "2"}}
+	lvs := []talos.LVMLogicalVolume{
+		{Name: "vg0/data", VolumeGroup: "vg0", Layout: "linear", Size: "20 GiB", Active: "active"},
+		{Name: "vg0/cache", VolumeGroup: "vg0", Layout: "raid1", Size: "8 GiB", Active: "false"},
+	}
+	return pvs, vgs, lvs
+}
+
+func TestRenderLVMHeightBudget(t *testing.T) {
+	for _, h := range []int{8, 15, 30} {
+		app := newTestApp(120, h+6)
+		app.selNode = &talos.Node{Hostname: "n1", IP: "10.0.0.1"}
+		app.lvmPVs, app.lvmVGs, app.lvmLVs = makeLVM()
+		out := app.renderLVM(h)
+		if got := lineCount(out); got > h {
+			t.Errorf("h=%d: %d lines > budget\n%s", h, got, out)
+		}
+	}
+}
+
+func TestRenderLVMEmpty(t *testing.T) {
+	app := newTestApp(120, 30)
+	app.selNode = &talos.Node{Hostname: "n1"}
+	out := app.renderLVM(24)
+	if !strings.Contains(out, "No LVM volumes") {
+		t.Errorf("expected empty-state message, got:\n%s", out)
+	}
+}
+
+func TestRenderResourceBrowserHeightBudget(t *testing.T) {
+	lines := makeLines(60)
+	for _, h := range []int{10, 20, 40} {
+		app := newTestApp(100, h+6)
+		app.resBrowserKind = "mounts"
+		app.resBrowserLines = lines
+		out := app.renderResourceBrowser(h)
+		if got := lineCount(out); got > h {
+			t.Errorf("h=%d: %d lines > budget", h, got)
+		}
+	}
+}
+
+// ── disks view with LVM section ──────────────────────────────────────────────
+
+func TestRenderDisksWithLVMWithinWidthAndHeight(t *testing.T) {
+	for _, width := range []int{80, 120, 200} {
+		app := newTestApp(width, 30)
+		app.disks = makeDisks()
+		app.disks[1].Dev = "/dev/sdb"
+		app.lvmPVs, app.lvmVGs, app.lvmLVs = makeLVM()
+		app.lvmPVs[0].Device = "/dev/sdb1"
+		out := app.renderDisks(24)
+		if got := maxLineWidth(out); got > width {
+			t.Errorf("w=%d: line %d chars\n%s", width, got, out)
+		}
+		if got := lineCount(out); got > 24 {
+			t.Errorf("w=%d: %d lines > 24", width, got)
+		}
+	}
+}
