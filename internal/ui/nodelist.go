@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -82,21 +81,7 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 			return app, nil
 		}
 		app.selNode = n
-		app.dmesgLines = nil
-		app.dmesgCur = 0
-		app.dmesgStreaming = true
-		app = app.goTo(StateDmesg)
-		app.dmesgCh = make(chan string, 500)
-		app.dmesgCtx, app.dmesgCancel = context.WithCancel(context.Background())
-		client := app.client
-		node := app.selNode.IP
-		dmesgCh := app.dmesgCh
-		dmesgCtx := app.dmesgCtx
-		go func() {
-			defer close(dmesgCh)
-			client.StreamDmesg(dmesgCtx, node, dmesgCh)
-		}()
-		return app, waitForDmesgLine(app.dmesgCh)
+		return startDmesg(app)
 
 	case "t":
 		n := app.selectedNode()
@@ -294,9 +279,9 @@ func (app App) renderNodeList(height int) string {
 
 		// Build plain fields first, then colorise — keeps alignment correct.
 		host := col(truncate(n.Hostname, colHost), colHost)
-		ip   := col(truncate(n.DisplayIP, colIP), colIP)
+		ip := col(truncate(n.DisplayIP, colIP), colIP)
 		role := col(truncate(n.Role, colRole), colRole)
-		ver  := col(truncate(n.Version, colVer), colVer)
+		ver := col(truncate(n.Version, colVer), colVer)
 
 		selected := i == app.nodeCur
 		cursor := "  "

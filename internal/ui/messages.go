@@ -48,6 +48,19 @@ type volumesLoadedMsg struct {
 	err     error
 }
 
+type lvmLoadedMsg struct {
+	pvs []talos.LVMPhysicalVolume
+	vgs []talos.LVMVolumeGroup
+	lvs []talos.LVMLogicalVolume
+	err error
+}
+
+type resourceTableMsg struct {
+	kind  string
+	lines []string
+	err   error
+}
+
 type processesLoadedMsg struct {
 	processes []talos.ProcessInfo
 	err       error

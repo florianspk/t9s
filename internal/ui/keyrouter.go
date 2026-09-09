@@ -1,8 +1,17 @@
 package ui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 func (app App) handleKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	// Command palette: route all keys to command handler
+	if app.cmdActive {
+		return app.handleCommandKey(msg)
+	}
+
 	// Search mode: route all keys to search handler
 	if app.searchActive {
 		return app.handleSearchKey(msg)
@@ -34,6 +43,22 @@ func (app App) handleKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app.helpVP.GotoTop()
 		app = app.goTo(StateHelp)
 		return app, nil
+	}
+
+	// Command palette: activate on ':' from any non-modal view. bubbletea
+	// coalesces fast/pasted input into a single KeyRunes msg, so match a
+	// leading ':' and carry the rest into the input.
+	if s := msg.String(); strings.HasPrefix(s, ":") &&
+		app.state != StateUpgradeTalos &&
+		app.state != StateUpgradeK8s &&
+		!app.upgradeRunning {
+		app.cmdActive = true
+		app.cmdErr = ""
+		app.cmdInput.Reset()
+		if len(s) > 1 {
+			app.cmdInput.SetValue(s[1:])
+		}
+		return app, app.cmdInput.Focus()
 	}
 
 	// Global search: activate on '/' for list-based views
@@ -90,6 +115,10 @@ func (app App) handleKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		return app.handleExtCatalogKey(msg)
 	case StateDisks:
 		return app.handleDisksKey(msg)
+	case StateLVM:
+		return app.handleLVMKey(msg)
+	case StateResourceBrowser:
+		return app.handleResourceBrowserKey(msg)
 	case StateProcesses:
 		return app.handleProcessesKey(msg)
 	case StateContainers:

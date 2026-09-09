@@ -467,6 +467,35 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return app, nil
 
+	case lvmLoadedMsg:
+		app.lvmLoad = false
+		app.lvmPVs, app.lvmVGs, app.lvmLVs, app.lvmErr = msg.pvs, msg.vgs, msg.lvs, msg.err
+		if app.state == StateLVM {
+			if msg.err != nil {
+				app.statusMsg = errStyle.Render("LVM: " + msg.err.Error())
+			} else {
+				app.statusMsg = fmt.Sprintf("%d VG · %d LV · %d PV", len(msg.vgs), len(msg.lvs), len(msg.pvs))
+			}
+		}
+		return app, nil
+
+	case resourceTableMsg:
+		app.resBrowserLoad = false
+		app.resBrowserKind = msg.kind
+		if msg.err != nil {
+			if msg.err == talos.ErrUnknownResource {
+				app.resBrowserErr = "unknown resource: " + msg.kind
+			} else {
+				app.resBrowserErr = msg.err.Error()
+			}
+			app.resBrowserLines = nil
+		} else {
+			app.resBrowserErr = ""
+			app.resBrowserLines = msg.lines
+			app.statusMsg = fmt.Sprintf("%s: %d rows", msg.kind, max(0, len(msg.lines)-1))
+		}
+		return app, nil
+
 	case processesLoadedMsg:
 		app.procLoading = false
 		if msg.err != nil {
@@ -903,7 +932,6 @@ func (app App) renderFooter() string {
 	return sepLine + "\n  " + status
 }
 
-
 func (app App) renderMain(height int) string {
 	switch app.state {
 	case StateNodeList:
@@ -920,6 +948,10 @@ func (app App) renderMain(height int) string {
 		return app.renderExtCatalog(height)
 	case StateDisks:
 		return app.renderDisks(height)
+	case StateLVM:
+		return app.renderLVM(height)
+	case StateResourceBrowser:
+		return app.renderResourceBrowser(height)
 	case StateProcesses:
 		return app.renderProcesses(height)
 	case StateContainers:
@@ -941,7 +973,6 @@ func (app App) renderMain(height int) string {
 	}
 	return ""
 }
-
 
 // --- Data loaders ---
 
@@ -1029,6 +1060,45 @@ func (app App) loadVolumes() tea.Cmd {
 		defer cancel()
 		vols, err := client.GetVolumeStatus(ctx, node)
 		return volumesLoadedMsg{volumes: vols, err: err}
+	}
+}
+
+func (app App) loadLVM() tea.Cmd {
+	client := app.client
+	if app.selNode == nil {
+		return nil
+	}
+	node := app.selNode.IP
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		pvs, err := client.GetLVMPhysicalVolumes(ctx, node)
+		if err == talos.ErrUnknownResource {
+			return lvmLoadedMsg{} // Talos < 1.14 or LVM extension absent — silent
+		}
+		vgs, verr := client.GetLVMVolumeGroups(ctx, node)
+		lvs, lerr := client.GetLVMLogicalVolumes(ctx, node)
+		if err == nil {
+			err = verr
+		}
+		if err == nil {
+			err = lerr
+		}
+		return lvmLoadedMsg{pvs: pvs, vgs: vgs, lvs: lvs, err: err}
+	}
+}
+
+func (app App) loadResourceTable(kind string) tea.Cmd {
+	client := app.client
+	node := ""
+	if app.selNode != nil {
+		node = app.selNode.IP
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		lines, err := client.GetResourceTable(ctx, node, kind)
+		return resourceTableMsg{kind: kind, lines: lines, err: err}
 	}
 }
 

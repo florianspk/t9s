@@ -24,7 +24,8 @@ func stateHints(app App) []hint {
 		return []hint{
 			{"↑↓", "Navigate"},
 			{"↵/s", "Services"},
-			{"e", "Extensions"},
+			{"i", "Disks"},
+			{":", "Command"},
 			{"?", "All shortcuts"},
 			{"q", "Quit"},
 		}
@@ -74,6 +75,22 @@ func stateHints(app App) []hint {
 	case StateDisks:
 		return []hint{
 			{"↑↓", "Navigate"},
+			{":lvm", "LVM view"},
+			{"r", "Refresh"},
+			{"Esc/q", "Back"},
+		}
+	case StateLVM:
+		return []hint{
+			{"↑↓", "Scroll"},
+			{"g/G", "Top/Bottom"},
+			{"r", "Refresh"},
+			{"Esc/q", "Back"},
+		}
+	case StateResourceBrowser:
+		return []hint{
+			{"↑↓", "Scroll"},
+			{"PgUp/Dn", "Half page"},
+			{"g/G", "Top/Bottom"},
 			{"r", "Refresh"},
 			{"Esc/q", "Back"},
 		}
