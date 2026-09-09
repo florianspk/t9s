@@ -83,6 +83,30 @@ type LVMLogicalVolume struct {
 	Active      string // "true"/"active"/…
 }
 
+// --- LVM desired state (from LVMVolumeGroupConfig / LVMLogicalVolumeConfig
+// documents in the machine config, reflected as *spec resources) ---
+
+type LVMVolumeGroupConfig struct {
+	Name            string
+	PhysicalVolumes []string
+}
+
+type LVMLogicalVolumeConfig struct {
+	Name        string
+	VolumeGroup string
+	Type        string // linear | raid0 | raid1 | raid10
+	Size        string // absolute size, or "80%" when sized against the VG
+	Mirrors     uint64
+	Stripes     uint64
+}
+
+// LVMValidationError is a problem the LVM controllers could not resolve, e.g.
+// a disk claimed by two volume groups.
+type LVMValidationError struct {
+	VolumeGroup string
+	Message     string
+}
+
 type ProcessInfo struct {
 	PID     string
 	State   string

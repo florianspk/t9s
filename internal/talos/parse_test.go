@@ -432,3 +432,59 @@ func TestParseResourceKinds(t *testing.T) {
 		}
 	}
 }
+
+// ── LVM desired state (specs) and validation errors ─────────────────────────
+
+func TestParseLVMVolumeGroupConfigs(t *testing.T) {
+	data := []byte(`{
+  "metadata": {"id": "data-vg"},
+  "spec": {"name": "data-vg", "physicalVolumes": ["/dev/sdb", "/dev/sdc"]}
+}`)
+	got, err := parseLVMVolumeGroupConfigs(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "data-vg" || len(got[0].PhysicalVolumes) != 2 {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestParseLVMLogicalVolumeConfigs(t *testing.T) {
+	// sizeBytes arrives quoted (protobuf-JSON 64-bit), sizePercentVG unquoted.
+	data := []byte(`{
+  "metadata": {"id": "data-vg/app"},
+  "spec": {"vgName": "data-vg", "name": "app", "type": "linear", "sizeBytes": "21474836480"}
+}
+{
+  "metadata": {"id": "data-vg/cache"},
+  "spec": {"vgName": "data-vg", "name": "cache", "type": "raid1", "sizePercentVG": 80, "mirrors": 2}
+}`)
+	got, err := parseLVMLogicalVolumeConfigs(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2, got %d", len(got))
+	}
+	if got[0].Name != "app" || got[0].Type != "linear" || got[0].Size != "21.5 GB" {
+		t.Errorf("LV[0] = %+v", got[0])
+	}
+	if got[1].Size != "80%" || got[1].Mirrors != 2 {
+		t.Errorf("LV[1] = %+v", got[1])
+	}
+}
+
+func TestParseLVMValidationErrors(t *testing.T) {
+	data := []byte(`{
+  "metadata": {"id": "data-vg"},
+  "spec": {"vgName": "data-vg", "message": "disk /dev/sdb claimed by two volume groups"}
+}`)
+	got, err := parseLVMValidationErrors(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].VolumeGroup != "data-vg" ||
+		!strings.Contains(got[0].Message, "two volume groups") {
+		t.Fatalf("got %+v", got)
+	}
+}

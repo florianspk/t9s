@@ -1102,6 +1102,145 @@ func (c *Client) GetLVMLogicalVolumes(ctx context.Context, node string) ([]LVMLo
 	return parseLVMLogicalVolumes(data)
 }
 
+// flexUint accepts a JSON number or a quoted number — protobuf-JSON renders
+// 64-bit integers as strings, smaller ones as numbers.
+type flexUint uint64
+
+func (f *flexUint) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		*f = 0
+		return nil
+	}
+	n, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*f = flexUint(n)
+	return nil
+}
+
+type lvmVGSpecEnvelope struct {
+	Metadata struct {
+		ID string `json:"id"`
+	} `json:"metadata"`
+	Spec struct {
+		Name            string   `json:"name"`
+		PhysicalVolumes []string `json:"physicalVolumes"`
+	} `json:"spec"`
+}
+
+type lvmLVSpecEnvelope struct {
+	Metadata struct {
+		ID string `json:"id"`
+	} `json:"metadata"`
+	Spec struct {
+		VGName        string   `json:"vgName"`
+		Name          string   `json:"name"`
+		Type          string   `json:"type"`
+		SizeBytes     flexUint `json:"sizeBytes"`
+		SizePercentVG flexUint `json:"sizePercentVG"`
+		Mirrors       flexUint `json:"mirrors"`
+		Stripes       flexUint `json:"stripes"`
+	} `json:"spec"`
+}
+
+type lvmValidationEnvelope struct {
+	Metadata struct {
+		ID string `json:"id"`
+	} `json:"metadata"`
+	Spec struct {
+		VGName  string `json:"vgName"`
+		Message string `json:"message"`
+	} `json:"spec"`
+}
+
+func (c *Client) GetLVMVolumeGroupConfigs(ctx context.Context, node string) ([]LVMVolumeGroupConfig, error) {
+	data, err := c.getLVMJSON(ctx, node, "lvmvolumegroupspecs")
+	if err != nil {
+		return nil, err
+	}
+	return parseLVMVolumeGroupConfigs(data)
+}
+
+func parseLVMVolumeGroupConfigs(data []byte) ([]LVMVolumeGroupConfig, error) {
+	envs, err := parseJSONStream[lvmVGSpecEnvelope](data)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LVMVolumeGroupConfig, 0, len(envs))
+	for _, e := range envs {
+		name := e.Spec.Name
+		if name == "" {
+			name = e.Metadata.ID
+		}
+		out = append(out, LVMVolumeGroupConfig{Name: name, PhysicalVolumes: e.Spec.PhysicalVolumes})
+	}
+	return out, nil
+}
+
+func (c *Client) GetLVMLogicalVolumeConfigs(ctx context.Context, node string) ([]LVMLogicalVolumeConfig, error) {
+	data, err := c.getLVMJSON(ctx, node, "lvmlogicalvolumespecs")
+	if err != nil {
+		return nil, err
+	}
+	return parseLVMLogicalVolumeConfigs(data)
+}
+
+func parseLVMLogicalVolumeConfigs(data []byte) ([]LVMLogicalVolumeConfig, error) {
+	envs, err := parseJSONStream[lvmLVSpecEnvelope](data)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LVMLogicalVolumeConfig, 0, len(envs))
+	for _, e := range envs {
+		name := e.Spec.Name
+		if name == "" {
+			name = e.Metadata.ID
+		}
+		size := ""
+		switch {
+		case e.Spec.SizePercentVG > 0:
+			size = fmt.Sprintf("%d%%", e.Spec.SizePercentVG)
+		case e.Spec.SizeBytes > 0:
+			size = FormatBytes(uint64(e.Spec.SizeBytes))
+		}
+		out = append(out, LVMLogicalVolumeConfig{
+			Name:        name,
+			VolumeGroup: e.Spec.VGName,
+			Type:        e.Spec.Type,
+			Size:        size,
+			Mirrors:     uint64(e.Spec.Mirrors),
+			Stripes:     uint64(e.Spec.Stripes),
+		})
+	}
+	return out, nil
+}
+
+func (c *Client) GetLVMValidationErrors(ctx context.Context, node string) ([]LVMValidationError, error) {
+	data, err := c.getLVMJSON(ctx, node, "lvmvalidationerrors")
+	if err != nil {
+		return nil, err
+	}
+	return parseLVMValidationErrors(data)
+}
+
+func parseLVMValidationErrors(data []byte) ([]LVMValidationError, error) {
+	envs, err := parseJSONStream[lvmValidationEnvelope](data)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LVMValidationError, 0, len(envs))
+	for _, e := range envs {
+		vg := e.Spec.VGName
+		if vg == "" {
+			vg = e.Metadata.ID
+		}
+		out = append(out, LVMValidationError{VolumeGroup: vg, Message: e.Spec.Message})
+	}
+	return out, nil
+}
+
 func parseLVMLogicalVolumes(data []byte) ([]LVMLogicalVolume, error) {
 	envs, err := parseJSONStream[lvmLVEnvelope](data)
 	if err != nil {
