@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -285,19 +286,18 @@ func extractSpecContent(raw string) string {
 
 	switch specNode.Kind {
 	case yaml.ScalarNode:
-		// Most common: spec is a quoted string with \n-escaped YAML.
+		// Most common: spec is a quoted string with \n-escaped YAML. Talos
+		// configs are multi-document (v1alpha1 plus HostnameConfig,
+		// LVMVolumeGroupConfig, …) so every document must be kept — dropping
+		// the tail would delete those settings on apply-config.
 		if specNode.Value == "" {
 			return raw
 		}
-		var inner yaml.Node
-		if err := yaml.Unmarshal([]byte(specNode.Value), &inner); err != nil {
-			return specNode.Value
-		}
-		b, err := yaml.Marshal(&inner)
+		docs, err := remarshalYAMLDocs(specNode.Value)
 		if err != nil {
 			return specNode.Value
 		}
-		return string(b)
+		return docs
 
 	case yaml.MappingNode:
 		b, err := yaml.Marshal(specNode)
@@ -307,6 +307,35 @@ func extractSpecContent(raw string) string {
 		return string(b)
 	}
 	return raw
+}
+
+// remarshalYAMLDocs re-indents every document of a multi-document YAML string,
+// preserving the "---" separators.
+func remarshalYAMLDocs(s string) (string, error) {
+	dec := yaml.NewDecoder(strings.NewReader(s))
+	var out []string
+	for {
+		var doc yaml.Node
+		err := dec.Decode(&doc)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if doc.Kind == 0 {
+			continue
+		}
+		b, err := yaml.Marshal(&doc)
+		if err != nil {
+			return "", err
+		}
+		out = append(out, strings.TrimRight(string(b), "\n"))
+	}
+	if len(out) == 0 {
+		return "", io.EOF
+	}
+	return strings.Join(out, "\n---\n") + "\n", nil
 }
 
 // yamlFindKey returns the value node for the given key in a mapping node.
