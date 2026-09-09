@@ -132,7 +132,7 @@ func buildHelpContent() string {
 
 	sb.WriteString(section("LVM (:lvm)", [][2]string{
 		{"↑↓ / j k", "Scroll"},
-		{"e", "Edit the machine config's LVM documents"},
+		{"e", "Open the machine config (edit & apply from there)"},
 		{"r", "Refresh"},
 		{"Esc / q", "Back"},
 	}))

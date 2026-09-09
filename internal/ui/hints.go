@@ -90,7 +90,7 @@ func stateHints(app App) []hint {
 		return []hint{
 			{"↑↓", "Scroll"},
 			{"g/G", "Top/Bottom"},
-			{"e", "Edit config"},
+			{"e", "Config"},
 			{"r", "Refresh"},
 			{"Esc/q", "Back"},
 		}
