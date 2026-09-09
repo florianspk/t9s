@@ -865,6 +865,19 @@ func (c *Client) GetResourceTable(ctx context.Context, node, kind string) ([]str
 	return splitLines(data), nil
 }
 
+// GetCommandTable runs a plain talosctl subcommand (not a COSI resource, e.g.
+// `talosctl mounts`) and returns its output lines.
+func (c *Client) GetCommandTable(ctx context.Context, node string, args ...string) ([]string, error) {
+	if node != "" {
+		args = append(args, "-n", node)
+	}
+	data, err := c.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	return splitLines(data), nil
+}
+
 // GetResourceYAML renders a resource as YAML. With id empty the whole collection
 // is returned, otherwise just that one resource.
 func (c *Client) GetResourceYAML(ctx context.Context, node, kind, id string) ([]string, error) {
@@ -995,15 +1008,16 @@ type lvmLVEnvelope struct {
 		ID string `json:"id"`
 	} `json:"metadata"`
 	Spec struct {
-		Path       string `json:"path"`
-		DMPath     string `json:"dmPath"`
-		Name       string `json:"name"`
-		FullName   string `json:"fullName"`
-		VGName     string `json:"vgName"`
-		Layout     string `json:"layout"`
-		Active     string `json:"active"`
-		Size       string `json:"size"`
-		PrettySize string `json:"prettySize"`
+		Path        string `json:"path"`
+		DMPath      string `json:"dmPath"`
+		Name        string `json:"name"`
+		FullName    string `json:"fullName"`
+		VGName      string `json:"vgName"`
+		Layout      string `json:"layout"`
+		Active      string `json:"active"`
+		Size        string `json:"size"`
+		PrettySize  string `json:"prettySize"`
+		KernelMinor string `json:"kernelMinor"`
 	} `json:"spec"`
 }
 
@@ -1241,6 +1255,17 @@ func parseLVMValidationErrors(data []byte) ([]LVMValidationError, error) {
 	return out, nil
 }
 
+// dmDevice turns an LV's kernel minor number into its /dev/dm-N node name.
+func dmDevice(minor string) string {
+	if minor == "" {
+		return ""
+	}
+	if _, err := strconv.ParseUint(minor, 10, 32); err != nil {
+		return ""
+	}
+	return "dm-" + minor
+}
+
 func parseLVMLogicalVolumes(data []byte) ([]LVMLogicalVolume, error) {
 	envs, err := parseJSONStream[lvmLVEnvelope](data)
 	if err != nil {
@@ -1264,6 +1289,7 @@ func parseLVMLogicalVolumes(data []byte) ([]LVMLogicalVolume, error) {
 			Layout:      e.Spec.Layout,
 			Size:        lvmPretty(e.Spec.PrettySize, e.Spec.Size),
 			Active:      e.Spec.Active,
+			DMDevice:    dmDevice(e.Spec.KernelMinor),
 		})
 	}
 	return out, nil

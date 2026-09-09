@@ -10,7 +10,30 @@ import (
 	"github.com/florianspk/t9s/internal/talos"
 )
 
+// visibleDisks hides device-mapper nodes that are just an LVM logical volume —
+// those are already listed, with context, in the LVM section below.
+func (app App) visibleDisks() []talos.DiskInfo {
+	dm := make(map[string]struct{}, len(app.lvmLVs))
+	for _, lv := range app.lvmLVs {
+		if lv.DMDevice != "" {
+			dm[lv.DMDevice] = struct{}{}
+		}
+	}
+	if len(dm) == 0 {
+		return app.disks
+	}
+	out := make([]talos.DiskInfo, 0, len(app.disks))
+	for _, d := range app.disks {
+		if _, hidden := dm[strings.TrimPrefix(d.Dev, "/dev/")]; hidden {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
 func (app App) handleDisksKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	nDisks := len(app.visibleDisks())
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
@@ -18,12 +41,12 @@ func (app App) handleDisksKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "up", "k":
 		if app.listScroll > 0 {
 			app.listScroll--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.disks), app.mainHeight()-3)
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, nDisks, app.mainHeight()-3)
 		}
 	case "down", "j":
-		if app.listScroll < len(app.disks)-1 {
+		if app.listScroll < nDisks-1 {
 			app.listScroll++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.disks), app.mainHeight()-3)
+			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, nDisks, app.mainHeight()-3)
 		}
 	case "r":
 		if app.selNode != nil {
@@ -44,7 +67,8 @@ func (app App) renderDisks(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := renderTitleBar("Disks", len(app.disks), 0, node)
+	disks := app.visibleDisks()
+	title := renderTitleBar("Disks", len(disks), 0, node)
 
 	if app.diskLoading && len(app.disks) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
@@ -98,7 +122,7 @@ func (app App) renderDisks(height int) string {
 
 	maxRows := height - 3
 	cur := app.listScroll
-	start := clampScrollStart(app.viewScrollStart, cur, len(app.disks), maxRows)
+	start := clampScrollStart(app.viewScrollStart, cur, len(disks), maxRows)
 
 	var sb strings.Builder
 	sb.WriteString(title)
@@ -106,8 +130,8 @@ func (app App) renderDisks(height int) string {
 	sb.WriteByte('\n')
 
 	rowsLeft := maxRows
-	for i := start; i < len(app.disks) && rowsLeft > 0; i++ {
-		d := app.disks[i]
+	for i := start; i < len(disks) && rowsLeft > 0; i++ {
+		d := disks[i]
 		selected := i == cur
 
 		cursor := "  "

@@ -72,7 +72,9 @@ func buildHelpContent() string {
 		{":metrics :procs", "Metrics / processes"},
 		{":containers :addr", "Containers / addresses"},
 		{":dmesg :ctx", "Dmesg / context switcher"},
+		{":df", "Filesystem usage (talosctl mounts)"},
 		{":<resource>", "Any talosctl resource (e.g. :mounts, :routes, :members)"},
+		{"Tab / ↑↓", "Complete; ':mnt' finds 'mounts'"},
 	}))
 	sb.WriteByte('\n')
 
@@ -127,8 +129,18 @@ func buildHelpContent() string {
 	}))
 	sb.WriteByte('\n')
 
-	sb.WriteString(section("LVM / Resource browser", [][2]string{
+	sb.WriteString(section("LVM (:lvm)", [][2]string{
 		{"↑↓ / j k", "Scroll"},
+		{"e", "Edit the machine config's LVM documents"},
+		{"r", "Refresh"},
+		{"Esc / q", "Back"},
+	}))
+	sb.WriteByte('\n')
+
+	sb.WriteString(section("Resource browser", [][2]string{
+		{"↑↓ / j k", "Scroll"},
+		{"↵", "Show the selected resource as YAML"},
+		{"y", "Toggle the whole listing to YAML"},
 		{"g / G", "Top / bottom"},
 		{"r", "Refresh"},
 		{"Esc / q", "Back"},

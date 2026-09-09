@@ -621,3 +621,25 @@ func TestRenderLVMShowsConfigAndErrors(t *testing.T) {
 		t.Errorf("%d lines > budget 34", got)
 	}
 }
+
+func TestVisibleDisksHidesLVDeviceMapperNodes(t *testing.T) {
+	app := newTestApp(120, 30)
+	app.disks = append(makeDisks(), talos.DiskInfo{Dev: "/dev/dm-0", Type: "dm", Size: "107.4 GB"})
+
+	if got := len(app.visibleDisks()); got != 4 {
+		t.Fatalf("without LVM data dm-0 must stay, got %d disks", got)
+	}
+
+	app.lvmLVs = []talos.LVMLogicalVolume{
+		{Name: "vg0/data", VolumeGroup: "vg0", Size: "107 GB", DMDevice: "dm-0"},
+	}
+	got := app.visibleDisks()
+	if len(got) != 3 {
+		t.Fatalf("dm-0 should be hidden, got %d disks", len(got))
+	}
+	for _, d := range got {
+		if strings.Contains(d.Dev, "dm-0") {
+			t.Errorf("dm-0 still listed: %+v", got)
+		}
+	}
+}

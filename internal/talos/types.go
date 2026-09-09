@@ -81,6 +81,7 @@ type LVMLogicalVolume struct {
 	Layout      string // linear | raid0 | raid1 | raid10
 	Size        string
 	Active      string // "true"/"active"/…
+	DMDevice    string // kernel device-mapper node, e.g. "dm-0"
 }
 
 // --- LVM desired state (from LVMVolumeGroupConfig / LVMLogicalVolumeConfig

@@ -61,6 +61,9 @@ func (app App) handleResourceBrowserKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		return app, app.loadResourceListing(app.resBrowserKind, app.resBrowserYAML)
 	case "y":
 		// Toggle the whole listing between table and YAML.
+		if pseudoKinds[app.resBrowserKind] != nil {
+			return app, nil // not a resource — no YAML form
+		}
 		app.resBrowserYAML = !app.resBrowserYAML
 		app.resBrowserLoad = true
 		app.listScroll, app.viewScrollStart = 0, 0

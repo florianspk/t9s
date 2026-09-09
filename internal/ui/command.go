@@ -13,7 +13,7 @@ import (
 var viewAliases = []string{
 	"nodes", "health", "disks", "lvm", "services", "extensions", "catalog",
 	"machineconfig", "metrics", "processes", "containers", "addresses",
-	"dmesg", "contexts", "help", "quit",
+	"dmesg", "contexts", "df", "help", "quit",
 }
 
 // maxCmdMatches caps the completion strip so it stays on one line.

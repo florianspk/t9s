@@ -1160,6 +1160,12 @@ func (app App) loadResourceTable(kind string) tea.Cmd {
 	return app.loadResourceListing(kind, false)
 }
 
+// pseudoKinds are palette names backed by a plain talosctl subcommand rather
+// than a COSI resource, so they have no YAML form and no per-row drill-in.
+var pseudoKinds = map[string][]string{
+	"df": {"mounts"}, // `talosctl mounts` — filesystem usage, unlike `get mounts`
+}
+
 // loadResourceListing fetches the browser listing as a table or as YAML.
 func (app App) loadResourceListing(kind string, asYAML bool) tea.Cmd {
 	client := app.client
@@ -1174,9 +1180,12 @@ func (app App) loadResourceListing(kind string, asYAML bool) tea.Cmd {
 			lines []string
 			err   error
 		)
-		if asYAML {
+		switch {
+		case pseudoKinds[kind] != nil:
+			lines, err = client.GetCommandTable(ctx, node, pseudoKinds[kind]...)
+		case asYAML:
 			lines, err = client.GetResourceYAML(ctx, node, kind, "")
-		} else {
+		default:
 			lines, err = client.GetResourceTable(ctx, node, kind)
 		}
 		return resourceTableMsg{kind: kind, lines: lines, err: err}
