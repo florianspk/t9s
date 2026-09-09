@@ -405,3 +405,30 @@ func TestParseLVMEmpty(t *testing.T) {
 		t.Errorf("empty LV: %v %v", lvs, err)
 	}
 }
+
+// ── resource-definition aliases (command palette completion) ─────────────────
+
+func TestParseResourceKinds(t *testing.T) {
+	data := []byte(`{
+  "metadata": {"id": "disks.block.talos.dev"},
+  "spec": {"aliases": ["disk"], "allAliases": ["disks", "disks.block", "disks.block.talos", "disk"]}
+}
+{
+  "metadata": {"id": "mountstatuses.runtime.talos.dev"},
+  "spec": {"aliases": ["mountstatus", "ms"], "allAliases": ["mounts", "mountstatus", "ms"]}
+}`)
+	got, err := parseResourceKinds(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"disk", "disks", "mounts", "mountstatus", "ms"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got %v, want %v (sorted, dotted forms dropped)", got, want)
+			break
+		}
+	}
+}

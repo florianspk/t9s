@@ -862,13 +862,94 @@ func (c *Client) GetResourceTable(ctx context.Context, node, kind string) ([]str
 		}
 		return nil, err
 	}
+	return splitLines(data), nil
+}
+
+// GetResourceYAML renders a resource as YAML. With id empty the whole collection
+// is returned, otherwise just that one resource.
+func (c *Client) GetResourceYAML(ctx context.Context, node, kind, id string) ([]string, error) {
+	args := []string{"get", kind}
+	if id != "" {
+		args = append(args, id)
+	}
+	if node != "" {
+		args = append(args, "-n", node)
+	}
+	args = append(args, "-o", "yaml")
+	data, err := c.run(ctx, args...)
+	if err != nil {
+		if isUnknownResourceErr(err) {
+			return nil, ErrUnknownResource
+		}
+		return nil, err
+	}
+	return splitLines(data), nil
+}
+
+type rdEnvelope struct {
+	Metadata struct {
+		ID string `json:"id"`
+	} `json:"metadata"`
+	Spec struct {
+		Aliases    []string `json:"aliases"`
+		AllAliases []string `json:"allAliases"`
+	} `json:"spec"`
+}
+
+// GetResourceKinds returns every resource name and alias the node knows about,
+// deduplicated and sorted. Feeds command-palette completion.
+func (c *Client) GetResourceKinds(ctx context.Context, node string) ([]string, error) {
+	args := []string{"get", "rd", "-o", "json"}
+	if node != "" {
+		args = append(args, "-n", node)
+	}
+	data, err := c.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	return parseResourceKinds(data)
+}
+
+func parseResourceKinds(data []byte) ([]string, error) {
+	envs, err := parseJSONStream[rdEnvelope](data)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(envs)*4)
+	var out []string
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		// Skip the fully-qualified forms ("disks.block.talos.dev") — the short
+		// aliases are what people type.
+		if s == "" || strings.Contains(s, ".") {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	for _, e := range envs {
+		for _, a := range e.Spec.AllAliases {
+			add(a)
+		}
+		for _, a := range e.Spec.Aliases {
+			add(a)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func splitLines(data []byte) []string {
 	var lines []string
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		lines = append(lines, strings.TrimRight(sc.Text(), " \t"))
 	}
-	return lines, nil
+	return lines
 }
 
 // --- LVM (Talos 1.14, storage.talos.dev) ---
