@@ -13,8 +13,8 @@ import (
 // visibleDisks hides device-mapper nodes that are just an LVM logical volume —
 // those are already listed, with context, in the LVM section below.
 func (app App) visibleDisks() []talos.DiskInfo {
-	dm := make(map[string]struct{}, len(app.lvmLVs))
-	for _, lv := range app.lvmLVs {
+	dm := make(map[string]struct{}, len(app.lvm.lvs))
+	for _, lv := range app.lvm.lvs {
 		if lv.DMDevice != "" {
 			dm[lv.DMDevice] = struct{}{}
 		}
@@ -53,7 +53,7 @@ func (app App) handleDisksKey(msg tea.KeyMsg) (App, tea.Cmd) {
 			app.diskLoading = true
 			app.listScroll = 0
 			app.volumes = nil
-			app.lvmPVs, app.lvmVGs, app.lvmLVs, app.lvmErr = nil, nil, nil, nil
+			app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err = nil, nil, nil, nil
 			return app, tea.Batch(app.loadDisks(), app.loadVolumes(), app.loadLVM())
 		}
 	case "esc", "q":
@@ -116,7 +116,7 @@ func (app App) renderDisks(height int) string {
 	// Index LVM physical volumes by their device basename (e.g. "sdb", "sdb1")
 	// so we can annotate the disk (or one of its partitions) that backs a VG.
 	pvByDev := make(map[string]talos.LVMPhysicalVolume)
-	for _, pv := range app.lvmPVs {
+	for _, pv := range app.lvm.pvs {
 		pvByDev[strings.TrimPrefix(pv.Device, "/dev/")] = pv
 	}
 
@@ -188,17 +188,17 @@ func (app App) renderDisks(height int) string {
 	}
 
 	// LVM section: volume groups and their logical volumes.
-	if rowsLeft > 0 && (len(app.lvmVGs) > 0 || len(app.lvmLVs) > 0) {
+	if rowsLeft > 0 && (len(app.lvm.vgs) > 0 || len(app.lvm.lvs) > 0) {
 		sb.WriteString(dimStyle.Render(strings.Repeat("─", min(app.width, 40))))
 		sb.WriteByte('\n')
 		rowsLeft--
 
 		lvsByVG := make(map[string][]talos.LVMLogicalVolume)
-		for _, lv := range app.lvmLVs {
+		for _, lv := range app.lvm.lvs {
 			lvsByVG[lv.VolumeGroup] = append(lvsByVG[lv.VolumeGroup], lv)
 		}
 
-		for _, vg := range app.lvmVGs {
+		for _, vg := range app.lvm.vgs {
 			if rowsLeft <= 0 {
 				break
 			}

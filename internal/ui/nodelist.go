@@ -183,7 +183,7 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app.diskLoading = true
 		app = app.goTo(StateDisks)
 		app.volumes = nil
-		app.lvmPVs, app.lvmVGs, app.lvmLVs, app.lvmErr = nil, nil, nil, nil
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err = nil, nil, nil, nil
 		return app, tea.Batch(app.loadDisks(), app.loadVolumes(), app.loadLVM())
 
 	case "H":

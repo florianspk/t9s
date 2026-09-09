@@ -130,22 +130,22 @@ func isSubsequence(short, long string) bool {
 }
 
 func (app App) refreshCmdMatches() App {
-	app.cmdMatches = matchCommands(app.cmdInput.Value(), app.cmdKinds)
-	if app.cmdMatchIdx >= len(app.cmdMatches) {
-		app.cmdMatchIdx = 0
+	app.palette.matches = matchCommands(app.palette.input.Value(), app.palette.kinds)
+	if app.palette.matchIdx >= len(app.palette.matches) {
+		app.palette.matchIdx = 0
 	}
 	return app
 }
 
 // renderCmdMatches draws the completion strip under the ":" prompt.
 func (app App) renderCmdMatches() string {
-	if len(app.cmdMatches) == 0 {
+	if len(app.palette.matches) == 0 {
 		return ""
 	}
 	sel := lipgloss.NewStyle().Background(colorBgSel).Foreground(colorWhite).Bold(true)
-	parts := make([]string, 0, len(app.cmdMatches))
-	for i, m := range app.cmdMatches {
-		if i == app.cmdMatchIdx {
+	parts := make([]string, 0, len(app.palette.matches))
+	for i, m := range app.palette.matches {
+		if i == app.palette.matchIdx {
 			parts = append(parts, sel.Render(" "+m+" "))
 		} else {
 			parts = append(parts, dimStyle.Render(" "+m+" "))
@@ -161,43 +161,43 @@ func (app App) handleCommandKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		return app, tea.Quit
 
 	case "esc":
-		app.cmdActive = false
-		app.cmdErr = ""
-		app.cmdMatches, app.cmdMatchIdx = nil, 0
-		app.cmdInput.Reset()
+		app.palette.active = false
+		app.palette.err = ""
+		app.palette.matches, app.palette.matchIdx = nil, 0
+		app.palette.input.Reset()
 		return app, nil
 
 	case "tab":
-		if len(app.cmdMatches) > 0 {
-			app.cmdInput.SetValue(app.cmdMatches[app.cmdMatchIdx])
-			app.cmdInput.CursorEnd()
+		if len(app.palette.matches) > 0 {
+			app.palette.input.SetValue(app.palette.matches[app.palette.matchIdx])
+			app.palette.input.CursorEnd()
 			app = app.refreshCmdMatches()
 		}
 		return app, nil
 
 	// ↑↓ / ctrl+p ctrl+n cycle completions; ←→ stay with the text cursor.
 	case "down", "ctrl+n":
-		if n := len(app.cmdMatches); n > 0 {
-			app.cmdMatchIdx = (app.cmdMatchIdx + 1) % n
+		if n := len(app.palette.matches); n > 0 {
+			app.palette.matchIdx = (app.palette.matchIdx + 1) % n
 		}
 		return app, nil
 
 	case "up", "ctrl+p":
-		if n := len(app.cmdMatches); n > 0 {
-			app.cmdMatchIdx = (app.cmdMatchIdx - 1 + n) % n
+		if n := len(app.palette.matches); n > 0 {
+			app.palette.matchIdx = (app.palette.matchIdx - 1 + n) % n
 		}
 		return app, nil
 
 	case "enter":
-		raw := strings.TrimSpace(app.cmdInput.Value())
+		raw := strings.TrimSpace(app.palette.input.Value())
 		// Run the highlighted completion so ":mnt" resolves to "mounts".
-		if len(app.cmdMatches) > 0 {
-			raw = app.cmdMatches[app.cmdMatchIdx]
+		if len(app.palette.matches) > 0 {
+			raw = app.palette.matches[app.palette.matchIdx]
 		}
-		app.cmdActive = false
-		app.cmdErr = ""
-		app.cmdMatches, app.cmdMatchIdx = nil, 0
-		app.cmdInput.Reset()
+		app.palette.active = false
+		app.palette.err = ""
+		app.palette.matches, app.palette.matchIdx = nil, 0
+		app.palette.input.Reset()
 		if raw == "" {
 			return app, nil
 		}
@@ -205,8 +205,8 @@ func (app App) handleCommandKey(msg tea.KeyMsg) (App, tea.Cmd) {
 
 	default:
 		var cmd tea.Cmd
-		app.cmdInput, cmd = app.cmdInput.Update(msg)
-		app.cmdMatchIdx = 0
+		app.palette.input, cmd = app.palette.input.Update(msg)
+		app.palette.matchIdx = 0
 		app = app.refreshCmdMatches()
 		return app, cmd
 	}
@@ -282,11 +282,11 @@ func (app App) runCommand(raw string) (App, tea.Cmd) {
 		return app, app.loadMachineConfig()
 	case "disks", "disk":
 		app.disks, app.diskLoading, app.volumes = nil, true, nil
-		app.lvmPVs, app.lvmVGs, app.lvmLVs, app.lvmErr = nil, nil, nil, nil
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err = nil, nil, nil, nil
 		app = app.goTo(StateDisks)
 		return app, tea.Batch(app.loadDisks(), app.loadVolumes(), app.loadLVM())
 	case "lvm", "pvs", "vgs", "lvs":
-		app.lvmPVs, app.lvmVGs, app.lvmLVs, app.lvmErr, app.lvmLoad = nil, nil, nil, nil, true
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err, app.lvm.load = nil, nil, nil, nil, true
 		app = app.goTo(StateLVM)
 		return app, app.loadLVM()
 	case "metrics", "stats", "top":
@@ -310,11 +310,11 @@ func (app App) runCommand(raw string) (App, tea.Cmd) {
 	}
 
 	// --- fallback: generic Talos resource browser ---
-	app.resBrowserKind = tok
-	app.resBrowserLines, app.resBrowserErr, app.resBrowserLoad = nil, "", true
-	app.resBrowserYAML = false
-	app.resBrowserDetail, app.resBrowserDetailID = nil, ""
-	app.resBrowserDetailErr, app.resBrowserDetailLoad = "", false
+	app.browser.kind = tok
+	app.browser.lines, app.browser.err, app.browser.load = nil, "", true
+	app.browser.yaml = false
+	app.browser.detail, app.browser.detailID = nil, ""
+	app.browser.detailErr, app.browser.detailLoad = "", false
 	app = app.goTo(StateResourceBrowser)
 	return app, app.loadResourceTable(tok)
 }

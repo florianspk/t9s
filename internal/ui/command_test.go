@@ -27,7 +27,7 @@ func TestRunCommandAliases(t *testing.T) {
 	}
 	for _, tc := range cases {
 		app := newTestApp(120, 40)
-		app.cmdInput = textinput.New()
+		app.palette.input = textinput.New()
 		app.selNode = &talos.Node{Hostname: "n1", IP: "10.0.0.1", Version: "v1.14.0"}
 		app.nodes = []talos.Node{*app.selNode}
 
@@ -40,7 +40,7 @@ func TestRunCommandAliases(t *testing.T) {
 
 func TestRunCommandUnknownResourceGoesToBrowser(t *testing.T) {
 	app := newTestApp(120, 40)
-	app.cmdInput = textinput.New()
+	app.palette.input = textinput.New()
 	app.selNode = &talos.Node{Hostname: "n1", IP: "10.0.0.1"}
 	app.nodes = []talos.Node{*app.selNode}
 
@@ -48,8 +48,8 @@ func TestRunCommandUnknownResourceGoesToBrowser(t *testing.T) {
 	if got.state != StateResourceBrowser {
 		t.Fatalf("state = %v, want StateResourceBrowser", got.state)
 	}
-	if got.resBrowserKind != "mounts" {
-		t.Errorf("resBrowserKind = %q, want mounts", got.resBrowserKind)
+	if got.browser.kind != "mounts" {
+		t.Errorf("browser.kind = %q, want mounts", got.browser.kind)
 	}
 	if cmd == nil {
 		t.Errorf("expected a load command")
@@ -58,7 +58,7 @@ func TestRunCommandUnknownResourceGoesToBrowser(t *testing.T) {
 
 func TestRunCommandNodeScopedWithoutNode(t *testing.T) {
 	app := newTestApp(120, 40)
-	app.cmdInput = textinput.New()
+	app.palette.input = textinput.New()
 	// no nodes, no selNode
 	got, _ := app.runCommand("disks")
 	if got.state == StateDisks {

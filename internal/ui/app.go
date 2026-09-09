@@ -148,40 +148,9 @@ type App struct {
 	diskLoading bool
 	volumes     []talos.VolumeInfo // loaded alongside disks
 
-	// LVM (dedicated :lvm view + disk-view annotation)
-	lvmPVs  []talos.LVMPhysicalVolume
-	lvmVGs  []talos.LVMVolumeGroup
-	lvmLVs  []talos.LVMLogicalVolume
-	lvmErr  error
-	lvmLoad bool
-
-	// LVM desired state, from the machine config's LVM* documents
-	lvmVGCfgs []talos.LVMVolumeGroupConfig
-	lvmLVCfgs []talos.LVMLogicalVolumeConfig
-	lvmErrors []talos.LVMValidationError
-
-	// Command palette (":")
-	cmdInput    textinput.Model
-	cmdActive   bool
-	cmdErr      string
-	cmdKinds    []string // resource names/aliases from `talosctl get rd`, for completion
-	cmdMatches  []string // completions for the current input
-	cmdMatchIdx int
-
-	// Generic resource browser (":<talos resource>")
-	resBrowserKind  string
-	resBrowserLines []string
-	resBrowserErr   string
-	resBrowserLoad  bool
-	resBrowserYAML  bool // whole listing rendered as YAML instead of a table
-
-	// Resource browser drill-in: one resource rendered as YAML
-	resBrowserDetail     []string
-	resBrowserDetailID   string
-	resBrowserDetailErr  string
-	resBrowserDetailLoad bool
-	resBrowserListScroll int // listing scroll stashed while the detail is open
-	resBrowserListStart  int
+	lvm     lvmState
+	palette cmdPalette
+	browser resourceBrowser
 
 	// Processes
 	processes   []talos.ProcessInfo
@@ -237,6 +206,48 @@ type App struct {
 	findQuery  string
 }
 
+// lvmState is the :lvm view: observed status plus the desired state declared
+// by the machine config's LVM* documents.
+type lvmState struct {
+	pvs    []talos.LVMPhysicalVolume
+	vgs    []talos.LVMVolumeGroup
+	lvs    []talos.LVMLogicalVolume
+	vgCfgs []talos.LVMVolumeGroupConfig
+	lvCfgs []talos.LVMLogicalVolumeConfig
+	errors []talos.LVMValidationError
+	lines  []string // rendered body, rebuilt when the data changes
+	err    error
+	load   bool
+}
+
+// cmdPalette is the ":" prompt and its completion state.
+type cmdPalette struct {
+	input    textinput.Model
+	active   bool
+	err      string
+	kinds    []string // resource names/aliases from `talosctl get rd`
+	matches  []string // completions for the current input
+	matchIdx int
+}
+
+// resourceBrowser is the generic `talosctl get <kind>` viewer, plus the
+// drill-in pane showing one resource as YAML.
+type resourceBrowser struct {
+	kind  string
+	lines []string
+	err   string
+	load  bool
+	yaml  bool // whole listing rendered as YAML instead of a table
+
+	detail     []string
+	detailID   string
+	detailErr  string
+	detailLoad bool
+
+	listScroll int // listing scroll stashed while the detail is open
+	listStart  int
+}
+
 func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 	ti := textinput.New()
 	ti.Placeholder = "ghcr.io/siderolabs/installer:v1.6.x"
@@ -266,7 +277,7 @@ func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 		upgradeInput: ti,
 		searchInput:  si,
 		findInput:    fi,
-		cmdInput:     ci,
+		palette:      cmdPalette{input: ci},
 		contexts:     cfg.ContextNames(),
 		logVP:        viewport.New(80, 20),
 		dmesgVP:      viewport.New(80, 20),
@@ -484,9 +495,9 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return app, nil
 
 	case lvmLoadedMsg:
-		app.lvmLoad = false
-		app.lvmPVs, app.lvmVGs, app.lvmLVs, app.lvmErr = msg.pvs, msg.vgs, msg.lvs, msg.err
-		app.lvmVGCfgs, app.lvmLVCfgs, app.lvmErrors = msg.vgCfgs, msg.lvCfgs, msg.errors
+		app.lvm.load = false
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err = msg.pvs, msg.vgs, msg.lvs, msg.err
+		app.lvm.vgCfgs, app.lvm.lvCfgs, app.lvm.errors = msg.vgCfgs, msg.lvCfgs, msg.errors
 		if app.state == StateLVM {
 			switch {
 			case msg.err != nil:
@@ -500,19 +511,19 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return app, nil
 
 	case resourceTableMsg:
-		app.resBrowserLoad = false
-		app.resBrowserKind = msg.kind
+		app.browser.load = false
+		app.browser.kind = msg.kind
 		if msg.err != nil {
 			if msg.err == talos.ErrUnknownResource {
-				app.resBrowserErr = "unknown resource: " + msg.kind
+				app.browser.err = "unknown resource: " + msg.kind
 			} else {
-				app.resBrowserErr = msg.err.Error()
+				app.browser.err = msg.err.Error()
 			}
-			app.resBrowserLines = nil
+			app.browser.lines = nil
 		} else {
-			app.resBrowserErr = ""
-			app.resBrowserLines = msg.lines
-			if app.resBrowserYAML {
+			app.browser.err = ""
+			app.browser.lines = msg.lines
+			if app.browser.yaml {
 				app.statusMsg = fmt.Sprintf("%s: %d lines of YAML", msg.kind, len(msg.lines))
 			} else {
 				app.statusMsg = fmt.Sprintf("%s: %d rows", msg.kind, max(0, len(msg.lines)-1))
@@ -522,25 +533,25 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case resourceKindsMsg:
 		if msg.err == nil {
-			app.cmdKinds = msg.kinds
-			if app.cmdActive {
+			app.palette.kinds = msg.kinds
+			if app.palette.active {
 				app = app.refreshCmdMatches()
 			}
 		}
 		return app, nil
 
 	case resourceYAMLMsg:
-		app.resBrowserDetailLoad = false
+		app.browser.detailLoad = false
 		if msg.err != nil {
 			if msg.err == talos.ErrUnknownResource {
-				app.resBrowserDetailErr = "unknown resource: " + msg.kind
+				app.browser.detailErr = "unknown resource: " + msg.kind
 			} else {
-				app.resBrowserDetailErr = msg.err.Error()
+				app.browser.detailErr = msg.err.Error()
 			}
-			app.resBrowserDetail = nil
+			app.browser.detail = nil
 		} else {
-			app.resBrowserDetailErr = ""
-			app.resBrowserDetail = msg.lines
+			app.browser.detailErr = ""
+			app.browser.detail = msg.lines
 			app.statusMsg = msg.kind + " / " + msg.id
 		}
 		return app, nil
@@ -748,7 +759,7 @@ func (app App) headerHeight() int {
 
 // footerHeight is footerH plus one line for the command-palette completions.
 func (app App) footerHeight() int {
-	if app.cmdActive && len(app.cmdMatches) > 0 {
+	if app.palette.active && len(app.palette.matches) > 0 {
 		return footerH + 1
 	}
 	return footerH
@@ -876,9 +887,9 @@ func resourceLine(app App) string {
 		}
 	case StateResourceBrowser:
 		if app.selNode != nil {
-			return fmt.Sprintf("%s › %s", app.resBrowserKind, app.selNode.Hostname)
+			return fmt.Sprintf("%s › %s", app.browser.kind, app.selNode.Hostname)
 		}
-		return app.resBrowserKind
+		return app.browser.kind
 	case StateContextSwitcher:
 		return fmt.Sprintf("Contexts (%d)", len(app.contexts))
 	}
@@ -961,10 +972,10 @@ func crumbLabel(s AppState) string {
 
 func (app App) renderFooter() string {
 	sepLine := strings.Repeat("─", app.width)
-	if app.cmdActive {
-		bar := keyStyle.Render(":") + app.cmdInput.View()
-		if app.cmdErr != "" {
-			bar += "   " + errStyle.Render(app.cmdErr)
+	if app.palette.active {
+		bar := keyStyle.Render(":") + app.palette.input.View()
+		if app.palette.err != "" {
+			bar += "   " + errStyle.Render(app.palette.err)
 		}
 		out := sepLine + "\n  " + bar
 		if m := app.renderCmdMatches(); m != "" {

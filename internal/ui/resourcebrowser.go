@@ -34,7 +34,7 @@ func resourceRowKey(header, row string) (node, id string, ok bool) {
 
 // detailOpen reports whether the drill-in YAML pane is showing.
 func (app App) detailOpen() bool {
-	return app.resBrowserDetailID != "" || app.resBrowserDetailLoad
+	return app.browser.detailID != "" || app.browser.detailLoad
 }
 
 func (app App) handleResourceBrowserKey(msg tea.KeyMsg) (App, tea.Cmd) {
@@ -42,7 +42,7 @@ func (app App) handleResourceBrowserKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		return app.handleResourceDetailKey(msg)
 	}
 
-	n := len(app.resBrowserLines)
+	n := len(app.browser.lines)
 	maxRows := max(1, app.mainHeight()-3)
 
 	scroll := func() {
@@ -57,32 +57,32 @@ func (app App) handleResourceBrowserKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app = app.goBack()
 		return app, nil
 	case "r":
-		app.resBrowserLoad = true
-		return app, app.loadResourceListing(app.resBrowserKind, app.resBrowserYAML)
+		app.browser.load = true
+		return app, app.loadResourceListing(app.browser.kind, app.browser.yaml)
 	case "y":
 		// Toggle the whole listing between table and YAML.
-		if pseudoKinds[app.resBrowserKind] != nil {
+		if pseudoKinds[app.browser.kind] != nil {
 			return app, nil // not a resource — no YAML form
 		}
-		app.resBrowserYAML = !app.resBrowserYAML
-		app.resBrowserLoad = true
+		app.browser.yaml = !app.browser.yaml
+		app.browser.load = true
 		app.listScroll, app.viewScrollStart = 0, 0
-		return app, app.loadResourceListing(app.resBrowserKind, app.resBrowserYAML)
+		return app, app.loadResourceListing(app.browser.kind, app.browser.yaml)
 	case "enter":
-		if app.resBrowserYAML || n == 0 {
+		if app.browser.yaml || n == 0 {
 			return app, nil
 		}
-		node, id, ok := resourceRowKey(app.resBrowserLines[0], app.resBrowserLines[app.listScroll])
+		node, id, ok := resourceRowKey(app.browser.lines[0], app.browser.lines[app.listScroll])
 		if !ok || id == "ID" {
 			app.statusMsg = warnStyle.Render("no resource on this row")
 			return app, nil
 		}
-		app.resBrowserDetailID = id
-		app.resBrowserDetailLoad = true
-		app.resBrowserDetail = nil
-		app.resBrowserListScroll, app.resBrowserListStart = app.listScroll, app.viewScrollStart
+		app.browser.detailID = id
+		app.browser.detailLoad = true
+		app.browser.detail = nil
+		app.browser.listScroll, app.browser.listStart = app.listScroll, app.viewScrollStart
 		app.listScroll, app.viewScrollStart = 0, 0
-		return app, app.loadResourceYAML(app.resBrowserKind, id, node)
+		return app, app.loadResourceYAML(app.browser.kind, id, node)
 	case "up", "k":
 		if app.listScroll > 0 {
 			app.listScroll--
@@ -112,7 +112,7 @@ func (app App) handleResourceBrowserKey(msg tea.KeyMsg) (App, tea.Cmd) {
 // handleResourceDetailKey drives the drill-in YAML pane; Esc returns to the
 // listing rather than leaving the view.
 func (app App) handleResourceDetailKey(msg tea.KeyMsg) (App, tea.Cmd) {
-	n := len(app.resBrowserDetail)
+	n := len(app.browser.detail)
 	maxRows := max(1, app.mainHeight()-3)
 	scroll := func() {
 		app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, n, maxRows)
@@ -123,15 +123,15 @@ func (app App) handleResourceDetailKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app.cleanup()
 		return app, tea.Quit
 	case "esc", "q":
-		app.resBrowserDetailID = ""
-		app.resBrowserDetail = nil
-		app.resBrowserDetailErr = ""
-		app.resBrowserDetailLoad = false
-		app.listScroll, app.viewScrollStart = app.resBrowserListScroll, app.resBrowserListStart
+		app.browser.detailID = ""
+		app.browser.detail = nil
+		app.browser.detailErr = ""
+		app.browser.detailLoad = false
+		app.listScroll, app.viewScrollStart = app.browser.listScroll, app.browser.listStart
 		return app, nil
 	case "r":
-		app.resBrowserDetailLoad = true
-		return app, app.loadResourceYAML(app.resBrowserKind, app.resBrowserDetailID, "")
+		app.browser.detailLoad = true
+		return app, app.loadResourceYAML(app.browser.kind, app.browser.detailID, "")
 	case "up", "k":
 		if app.listScroll > 0 {
 			app.listScroll--
@@ -163,39 +163,39 @@ func (app App) renderResourceBrowser(height int) string {
 		return app.renderResourceDetail(height)
 	}
 
-	kind := app.resBrowserKind
-	count := max(0, len(app.resBrowserLines)-1)
-	if app.resBrowserYAML {
+	kind := app.browser.kind
+	count := max(0, len(app.browser.lines)-1)
+	if app.browser.yaml {
 		kind += " [yaml]"
 		count = -1
 	}
 	title := renderTitleBar(kind, count, 0, nodeName(app.selNode))
 
-	if app.resBrowserErr != "" {
+	if app.browser.err != "" {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
-			errStyle.Render(app.resBrowserErr))
+			errStyle.Render(app.browser.err))
 	}
-	if app.resBrowserLoad && len(app.resBrowserLines) == 0 {
+	if app.browser.load && len(app.browser.lines) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
-			infoStyle.Render("Loading "+app.resBrowserKind+"…"))
+			infoStyle.Render("Loading "+app.browser.kind+"…"))
 	}
-	if len(app.resBrowserLines) == 0 {
+	if len(app.browser.lines) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
 			warnStyle.Render("No rows."))
 	}
-	return title + renderLinesCursor(app.resBrowserLines, app.listScroll, app.width, height-2, app.viewScrollStart, "")
+	return title + renderLinesCursor(app.browser.lines, app.listScroll, app.width, height-2, app.viewScrollStart, "")
 }
 
 func (app App) renderResourceDetail(height int) string {
-	title := renderTitleBar(app.resBrowserKind+" / "+app.resBrowserDetailID, -1, 0, nodeName(app.selNode))
+	title := renderTitleBar(app.browser.kind+" / "+app.browser.detailID, -1, 0, nodeName(app.selNode))
 
-	if app.resBrowserDetailErr != "" {
+	if app.browser.detailErr != "" {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
-			errStyle.Render(app.resBrowserDetailErr))
+			errStyle.Render(app.browser.detailErr))
 	}
-	if len(app.resBrowserDetail) == 0 {
+	if len(app.browser.detail) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
-			infoStyle.Render("Loading "+app.resBrowserDetailID+"…"))
+			infoStyle.Render("Loading "+app.browser.detailID+"…"))
 	}
-	return title + renderLinesCursor(app.resBrowserDetail, app.listScroll, app.width, height-2, app.viewScrollStart, "")
+	return title + renderLinesCursor(app.browser.detail, app.listScroll, app.width, height-2, app.viewScrollStart, "")
 }

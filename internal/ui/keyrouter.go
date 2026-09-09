@@ -8,7 +8,7 @@ import (
 
 func (app App) handleKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	// Command palette: route all keys to command handler
-	if app.cmdActive {
+	if app.palette.active {
 		return app.handleCommandKey(msg)
 	}
 
@@ -52,16 +52,16 @@ func (app App) handleKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app.state != StateUpgradeTalos &&
 		app.state != StateUpgradeK8s &&
 		!app.upgradeRunning {
-		app.cmdActive = true
-		app.cmdErr = ""
-		app.cmdMatchIdx = 0
-		app.cmdInput.Reset()
+		app.palette.active = true
+		app.palette.err = ""
+		app.palette.matchIdx = 0
+		app.palette.input.Reset()
 		if len(s) > 1 {
-			app.cmdInput.SetValue(s[1:])
+			app.palette.input.SetValue(s[1:])
 		}
 		app = app.refreshCmdMatches()
-		cmds := []tea.Cmd{app.cmdInput.Focus()}
-		if app.cmdKinds == nil {
+		cmds := []tea.Cmd{app.palette.input.Focus()}
+		if app.palette.kinds == nil {
 			cmds = append(cmds, app.loadResourceKinds())
 		}
 		return app, tea.Batch(cmds...)

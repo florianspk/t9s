@@ -12,7 +12,7 @@ type hint struct {
 }
 
 func yamlHint(app App) string {
-	if app.resBrowserYAML {
+	if app.browser.yaml {
 		return "Table"
 	}
 	return "All YAML"

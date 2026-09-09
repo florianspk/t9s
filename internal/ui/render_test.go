@@ -548,7 +548,7 @@ func TestRenderLVMHeightBudget(t *testing.T) {
 	for _, h := range []int{8, 15, 30} {
 		app := newTestApp(120, h+6)
 		app.selNode = &talos.Node{Hostname: "n1", IP: "10.0.0.1"}
-		app.lvmPVs, app.lvmVGs, app.lvmLVs = makeLVM()
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs = makeLVM()
 		out := app.renderLVM(h)
 		if got := lineCount(out); got > h {
 			t.Errorf("h=%d: %d lines > budget\n%s", h, got, out)
@@ -569,8 +569,8 @@ func TestRenderResourceBrowserHeightBudget(t *testing.T) {
 	lines := makeLines(60)
 	for _, h := range []int{10, 20, 40} {
 		app := newTestApp(100, h+6)
-		app.resBrowserKind = "mounts"
-		app.resBrowserLines = lines
+		app.browser.kind = "mounts"
+		app.browser.lines = lines
 		out := app.renderResourceBrowser(h)
 		if got := lineCount(out); got > h {
 			t.Errorf("h=%d: %d lines > budget", h, got)
@@ -585,8 +585,8 @@ func TestRenderDisksWithLVMWithinWidthAndHeight(t *testing.T) {
 		app := newTestApp(width, 30)
 		app.disks = makeDisks()
 		app.disks[1].Dev = "/dev/sdb"
-		app.lvmPVs, app.lvmVGs, app.lvmLVs = makeLVM()
-		app.lvmPVs[0].Device = "/dev/sdb1"
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs = makeLVM()
+		app.lvm.pvs[0].Device = "/dev/sdb1"
 		out := app.renderDisks(24)
 		if got := maxLineWidth(out); got > width {
 			t.Errorf("w=%d: line %d chars\n%s", width, got, out)
@@ -600,14 +600,14 @@ func TestRenderDisksWithLVMWithinWidthAndHeight(t *testing.T) {
 func TestRenderLVMShowsConfigAndErrors(t *testing.T) {
 	app := newTestApp(140, 40)
 	app.selNode = &talos.Node{Hostname: "n1", IP: "10.0.0.1"}
-	app.lvmPVs, app.lvmVGs, app.lvmLVs = makeLVM()
-	app.lvmVGCfgs = []talos.LVMVolumeGroupConfig{
+	app.lvm.pvs, app.lvm.vgs, app.lvm.lvs = makeLVM()
+	app.lvm.vgCfgs = []talos.LVMVolumeGroupConfig{
 		{Name: "vg0", PhysicalVolumes: []string{"/dev/sdb", "/dev/sdc"}},
 	}
-	app.lvmLVCfgs = []talos.LVMLogicalVolumeConfig{
+	app.lvm.lvCfgs = []talos.LVMLogicalVolumeConfig{
 		{Name: "app", VolumeGroup: "vg0", Type: "raid1", Size: "80%", Mirrors: 2},
 	}
-	app.lvmErrors = []talos.LVMValidationError{
+	app.lvm.errors = []talos.LVMValidationError{
 		{VolumeGroup: "vg0", Message: "disk /dev/sdb claimed twice"},
 	}
 
@@ -630,7 +630,7 @@ func TestVisibleDisksHidesLVDeviceMapperNodes(t *testing.T) {
 		t.Fatalf("without LVM data dm-0 must stay, got %d disks", got)
 	}
 
-	app.lvmLVs = []talos.LVMLogicalVolume{
+	app.lvm.lvs = []talos.LVMLogicalVolume{
 		{Name: "vg0/data", VolumeGroup: "vg0", Size: "107 GB", DMDevice: "dm-0"},
 	}
 	got := app.visibleDisks()

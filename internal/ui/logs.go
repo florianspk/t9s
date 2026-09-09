@@ -195,7 +195,7 @@ func findLinePrev(lines []string, from int, q string) int {
 	q = strings.ToLower(q)
 	n := len(lines)
 	for i := 0; i < n; i++ {
-		idx := ((from - i) % n + n) % n
+		idx := ((from-i)%n + n) % n
 		if strings.Contains(strings.ToLower(lines[idx]), q) {
 			return idx
 		}
