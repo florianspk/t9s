@@ -334,20 +334,22 @@ func (app App) runCommand(raw string) (App, tea.Cmd) {
 	tok := strings.ToLower(strings.Fields(raw)[0])
 
 	cmd, known := commandIndex[tok]
-	if !known {
-		return app.openResourceBrowser(tok)
-	}
 
-	var node *talos.Node
-	if cmd.node {
-		node = app.targetNode()
+	// Unknown tokens go to the generic browser, which is node-scoped like the
+	// resource views.
+	if !known || cmd.node {
+		node := app.targetNode()
 		if node == nil {
 			app.statusMsg = warnStyle.Render("select a node first (" + tok + ")")
 			return app, nil
 		}
 		app.selNode = node
+		if !known {
+			return app.openResourceBrowser(tok)
+		}
+		return cmd.run(app, node)
 	}
-	return cmd.run(app, node)
+	return cmd.run(app, nil)
 }
 
 // targetNode is the node a node-scoped command acts on: the one already

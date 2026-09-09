@@ -9,7 +9,7 @@ import (
 )
 
 func (app App) handleLVMKey(msg tea.KeyMsg) (App, tea.Cmd) {
-	if app.scrollList(msg.String(), len(app.lvmLines())) {
+	if app.scrollList(msg.String(), len(app.lvmBody())) {
 		return app, nil
 	}
 
@@ -37,8 +37,17 @@ func (app App) handleLVMKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	return app, nil
 }
 
-// lvmLines builds the full rendered body once so the key handler and the
-// renderer agree on line count for scrolling.
+// lvmBody returns the rendered body, using the cache filled when the data was
+// loaded and falling back to rendering on the spot if it is empty.
+func (app App) lvmBody() []string {
+	if app.lvm.lines != nil {
+		return app.lvm.lines
+	}
+	return app.lvmLines()
+}
+
+// lvmLines renders the whole body. It is called when the data changes, not per
+// keystroke — the result is cached in app.lvm.lines.
 func (app App) lvmLines() []string {
 	var out []string
 	dash := func(s string) string {
@@ -134,9 +143,5 @@ func (app App) renderLVM(height int) string {
 			dimStyle.Render(fmt.Sprintf("No LVM volumes on %s.", nodeName(app.selNode))))
 	}
 
-	lines := app.lvmLines()
-	maxRows := max(1, height-3)
-	start := clampScrollStart(app.viewScrollStart, app.listScroll, len(lines), maxRows)
-	end := min(len(lines), start+maxRows)
-	return title + strings.Join(lines[start:end], "\n")
+	return title + renderLinesCursor(app.lvmBody(), app.listScroll, app.width, height-2, app.viewScrollStart, "")
 }

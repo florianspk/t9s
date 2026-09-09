@@ -72,6 +72,13 @@ func TestResourceRowKey(t *testing.T) {
 	if !ok || node != "10.17.84.213" || id != "EPHEMERAL" {
 		t.Errorf("got (%q, %q, %v)", node, id, ok)
 	}
+	// An ID containing spaces is read by column offset, not field index.
+	const wide = "NODE           NAMESPACE   TYPE         ID                 VERSION   SOURCE"
+	if _, id, ok := resourceRowKey(wide,
+		"10.17.84.213   runtime     MountStatus  some id with spaces  1         /dev/sda4"); !ok || id != "some id with spaces" {
+		t.Errorf("spaced ID: got %q ok=%v", id, ok)
+	}
+
 	// Not a `talosctl get` table (e.g. `talosctl mounts`, or YAML mode).
 	if _, _, ok := resourceRowKey("NODE  FILESYSTEM  SIZE(GB)", "10.0.0.1  none  4.08"); ok {
 		t.Error("non-resource table must not yield a key")
@@ -162,5 +169,20 @@ func TestCommandTableIsConsistent(t *testing.T) {
 		if _, ok := commandIndex[k]; !ok {
 			t.Errorf("pseudo-kind %q is not in the command table", k)
 		}
+	}
+}
+
+// The generic browser is node-scoped, like the resource views it sits next to.
+func TestRunCommandUnknownTokenTargetsANode(t *testing.T) {
+	app := newTestApp(120, 40)
+	app.palette.input = textinput.New()
+	app.nodes = []talos.Node{{Hostname: "n1", IP: "10.0.0.1"}}
+
+	got, _ := app.runCommand("mounts")
+	if got.selNode == nil || got.selNode.IP != "10.0.0.1" {
+		t.Errorf("browser must target a node, got %+v", got.selNode)
+	}
+	if got.browser.kind != "mounts" {
+		t.Errorf("kind = %q", got.browser.kind)
 	}
 }

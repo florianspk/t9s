@@ -18,18 +18,30 @@ func nodeName(n *talos.Node) string {
 }
 
 // resourceRowKey extracts the node and resource ID from a `talosctl get` table
-// row. ok is false when the listing is not in the NODE/NAMESPACE/TYPE/ID shape
-// (yaml mode, `talosctl mounts`, …).
+// row. Columns are read by their offset in the header rather than by field
+// index, so an ID containing spaces still parses. ok is false when the listing
+// is not in the NODE/NAMESPACE/TYPE/ID shape (yaml mode, `talosctl mounts`, …).
 func resourceRowKey(header, row string) (node, id string, ok bool) {
 	h := strings.Fields(header)
-	if len(h) < 4 || h[0] != "NODE" || h[1] != "NAMESPACE" || h[2] != "TYPE" || h[3] != "ID" {
+	if len(h) < 5 || h[0] != "NODE" || h[1] != "NAMESPACE" || h[2] != "TYPE" || h[3] != "ID" {
 		return "", "", false
 	}
+	idStart := strings.Index(header, " ID ")
+	verStart := strings.Index(header, h[4])
+	if idStart < 0 || verStart <= idStart {
+		return "", "", false
+	}
+	idStart++ // step over the space before "ID"
+
 	f := strings.Fields(row)
-	if len(f) < 4 {
+	if len(f) < 4 || idStart >= len(row) {
 		return "", "", false
 	}
-	return f[0], f[3], true
+	id = strings.TrimSpace(row[idStart:min(verStart, len(row))])
+	if id == "" {
+		return "", "", false
+	}
+	return f[0], id, true
 }
 
 // detailOpen reports whether the drill-in YAML pane is showing.

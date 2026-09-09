@@ -498,6 +498,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		app.lvm.load = false
 		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err = msg.pvs, msg.vgs, msg.lvs, msg.err
 		app.lvm.vgCfgs, app.lvm.lvCfgs, app.lvm.errors = msg.vgCfgs, msg.lvCfgs, msg.errors
+		app.lvm.lines = app.lvmLines()
 		if app.state == StateLVM {
 			switch {
 			case msg.err != nil:
