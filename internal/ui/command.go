@@ -175,14 +175,14 @@ func (app App) handleCommandKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		}
 		return app, nil
 
-	// ↑↓ cycle completions; ←→ stay with the text cursor.
-	case "down":
+	// ↑↓ / ctrl+p ctrl+n cycle completions; ←→ stay with the text cursor.
+	case "down", "ctrl+n":
 		if n := len(app.cmdMatches); n > 0 {
 			app.cmdMatchIdx = (app.cmdMatchIdx + 1) % n
 		}
 		return app, nil
 
-	case "up":
+	case "up", "ctrl+p":
 		if n := len(app.cmdMatches); n > 0 {
 			app.cmdMatchIdx = (app.cmdMatchIdx - 1 + n) % n
 		}

@@ -74,7 +74,8 @@ func buildHelpContent() string {
 		{":dmesg :ctx", "Dmesg / context switcher"},
 		{":df", "Filesystem usage (talosctl mounts)"},
 		{":<resource>", "Any talosctl resource (e.g. :mounts, :routes, :members)"},
-		{"Tab / ↑↓", "Complete; ':mnt' finds 'mounts'"},
+		{"Tab", "Complete; ':mnt' finds 'mounts'"},
+		{"↑↓ / ^p ^n", "Cycle completions"},
 	}))
 	sb.WriteByte('\n')
 
