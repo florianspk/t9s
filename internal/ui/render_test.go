@@ -596,3 +596,28 @@ func TestRenderDisksWithLVMWithinWidthAndHeight(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderLVMShowsConfigAndErrors(t *testing.T) {
+	app := newTestApp(140, 40)
+	app.selNode = &talos.Node{Hostname: "n1", IP: "10.0.0.1"}
+	app.lvmPVs, app.lvmVGs, app.lvmLVs = makeLVM()
+	app.lvmVGCfgs = []talos.LVMVolumeGroupConfig{
+		{Name: "vg0", PhysicalVolumes: []string{"/dev/sdb", "/dev/sdc"}},
+	}
+	app.lvmLVCfgs = []talos.LVMLogicalVolumeConfig{
+		{Name: "app", VolumeGroup: "vg0", Type: "raid1", Size: "80%", Mirrors: 2},
+	}
+	app.lvmErrors = []talos.LVMValidationError{
+		{VolumeGroup: "vg0", Message: "disk /dev/sdb claimed twice"},
+	}
+
+	out := app.renderLVM(34)
+	for _, want := range []string{"VALIDATION ERRORS", "claimed twice", "CONFIG", "/dev/sdb", "raid1", "80%"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if got := lineCount(out); got > 34 {
+		t.Errorf("%d lines > budget 34", got)
+	}
+}

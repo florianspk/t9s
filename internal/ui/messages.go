@@ -49,10 +49,13 @@ type volumesLoadedMsg struct {
 }
 
 type lvmLoadedMsg struct {
-	pvs []talos.LVMPhysicalVolume
-	vgs []talos.LVMVolumeGroup
-	lvs []talos.LVMLogicalVolume
-	err error
+	pvs    []talos.LVMPhysicalVolume
+	vgs    []talos.LVMVolumeGroup
+	lvs    []talos.LVMLogicalVolume
+	vgCfgs []talos.LVMVolumeGroupConfig
+	lvCfgs []talos.LVMLogicalVolumeConfig
+	errors []talos.LVMValidationError
+	err    error
 }
 
 type resourceTableMsg struct {

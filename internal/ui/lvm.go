@@ -28,6 +28,14 @@ func (app App) handleLVMKey(msg tea.KeyMsg) (App, tea.Cmd) {
 			app.lvmLoad = true
 			return app, app.loadLVM()
 		}
+	case "e":
+		// LVM is declared in the machine config; edit it there.
+		if app.selNode != nil {
+			app.machConf, app.machLoading = "", true
+			app.statusMsg = dimStyle.Render("LVM is configured in the machine config — press e again to edit")
+			app = app.goTo(StateMachineConfig)
+			return app, app.loadMachineConfig()
+		}
 	case "up", "k":
 		if app.listScroll > 0 {
 			app.listScroll--
@@ -67,6 +75,15 @@ func (app App) lvmLines() []string {
 
 	row := func(cells ...string) string { return "  " + strings.Join(cells, " ") }
 
+	// Validation errors first — they explain why the desired state is not met.
+	if len(app.lvmErrors) > 0 {
+		out = append(out, errStyle.Bold(true).Render("VALIDATION ERRORS"))
+		for _, e := range app.lvmErrors {
+			out = append(out, row(col(truncate(e.VolumeGroup, 20), 20), errStyle.Render(e.Message)))
+		}
+		out = append(out, "")
+	}
+
 	out = append(out, colHeaderStyle.Render("VOLUME GROUPS"))
 	if len(app.lvmVGs) == 0 {
 		out = append(out, dimStyle.Render("  none"))
@@ -94,6 +111,29 @@ func (app App) lvmLines() []string {
 		out = append(out, dimStyle.Render(row(col("DEVICE", 22), col("VG", 16), col("SIZE", 12), "FREE")))
 		for _, p := range app.lvmPVs {
 			out = append(out, row(col(truncate(p.Device, 22), 22), col(dash(p.VolumeGroup), 16), col(dash(p.Size), 12), dash(p.Free)))
+		}
+	}
+
+	// Desired state, from the machine config's LVM* documents.
+	if len(app.lvmVGCfgs) > 0 || len(app.lvmLVCfgs) > 0 {
+		out = append(out, "", colHeaderStyle.Render("CONFIG")+dimStyle.Render("   (machine config — press e to edit)"))
+		if len(app.lvmVGCfgs) > 0 {
+			out = append(out, dimStyle.Render(row(col("VOLUME GROUP", 22), "PHYSICAL VOLUMES")))
+			for _, v := range app.lvmVGCfgs {
+				out = append(out, row(col(truncate(v.Name, 22), 22), dash(strings.Join(v.PhysicalVolumes, ", "))))
+			}
+		}
+		if len(app.lvmLVCfgs) > 0 {
+			out = append(out, dimStyle.Render(row(col("LOGICAL VOLUME", 22), col("VG", 16), col("TYPE", 8), col("SIZE", 10), "MIRRORS/STRIPES")))
+			for _, l := range app.lvmLVCfgs {
+				out = append(out, row(
+					col(truncate(l.Name, 22), 22),
+					col(dash(l.VolumeGroup), 16),
+					col(dash(l.Type), 8),
+					col(dash(l.Size), 10),
+					fmt.Sprintf("%d/%d", l.Mirrors, l.Stripes),
+				))
+			}
 		}
 	}
 	return out

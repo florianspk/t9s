@@ -155,6 +155,11 @@ type App struct {
 	lvmErr  error
 	lvmLoad bool
 
+	// LVM desired state, from the machine config's LVM* documents
+	lvmVGCfgs []talos.LVMVolumeGroupConfig
+	lvmLVCfgs []talos.LVMLogicalVolumeConfig
+	lvmErrors []talos.LVMValidationError
+
 	// Command palette (":")
 	cmdInput    textinput.Model
 	cmdActive   bool
@@ -481,10 +486,14 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case lvmLoadedMsg:
 		app.lvmLoad = false
 		app.lvmPVs, app.lvmVGs, app.lvmLVs, app.lvmErr = msg.pvs, msg.vgs, msg.lvs, msg.err
+		app.lvmVGCfgs, app.lvmLVCfgs, app.lvmErrors = msg.vgCfgs, msg.lvCfgs, msg.errors
 		if app.state == StateLVM {
-			if msg.err != nil {
+			switch {
+			case msg.err != nil:
 				app.statusMsg = errStyle.Render("LVM: " + msg.err.Error())
-			} else {
+			case len(msg.errors) > 0:
+				app.statusMsg = errStyle.Render(fmt.Sprintf("%d LVM validation error(s)", len(msg.errors)))
+			default:
 				app.statusMsg = fmt.Sprintf("%d VG · %d LV · %d PV", len(msg.vgs), len(msg.lvs), len(msg.pvs))
 			}
 		}
@@ -1130,13 +1139,20 @@ func (app App) loadLVM() tea.Cmd {
 		}
 		vgs, verr := client.GetLVMVolumeGroups(ctx, node)
 		lvs, lerr := client.GetLVMLogicalVolumes(ctx, node)
+		vgCfgs, _ := client.GetLVMVolumeGroupConfigs(ctx, node)
+		lvCfgs, _ := client.GetLVMLogicalVolumeConfigs(ctx, node)
+		verrs, _ := client.GetLVMValidationErrors(ctx, node)
 		if err == nil {
 			err = verr
 		}
 		if err == nil {
 			err = lerr
 		}
-		return lvmLoadedMsg{pvs: pvs, vgs: vgs, lvs: lvs, err: err}
+		return lvmLoadedMsg{
+			pvs: pvs, vgs: vgs, lvs: lvs,
+			vgCfgs: vgCfgs, lvCfgs: lvCfgs, errors: verrs,
+			err: err,
+		}
 	}
 }
 
