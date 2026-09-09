@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,22 +27,52 @@ func buildHelpContent() string {
 	h := titleStyle.Render
 
 	section := func(title string, rows [][2]string) string {
+		w := 12
+		for _, r := range rows {
+			if len(r[0]) > w {
+				w = len(r[0])
+			}
+		}
 		var sb strings.Builder
 		sb.WriteString(h(title) + "\n")
 		for _, r := range rows {
-			sb.WriteString(fmt.Sprintf("  %-12s %s\n", k(r[0]), d(r[1])))
+			// pad the raw key text (styling adds ANSI that breaks %-Ns width)
+			sb.WriteString("  " + k(r[0]) + strings.Repeat(" ", w-len(r[0])+2) + d(r[1]) + "\n")
 		}
 		return sb.String()
 	}
 
 	var sb strings.Builder
 
-	sb.WriteString(section("Global", [][2]string{
+	sb.WriteString(section("General", [][2]string{
 		{"?", "Toggle this help"},
-		{"x", "Switch context"},
+		{":", "Command palette (jump to any view / resource)"},
 		{"/", "Search / filter list"},
-		{"Esc", "Back / cancel"},
+		{"x", "Switch context"},
+		{"w", "Toggle line wrap"},
+		{"Esc", "Back / cancel (walks the breadcrumb stack)"},
 		{"q / ctrl+c", "Quit"},
+	}))
+	sb.WriteByte('\n')
+
+	sb.WriteString(section("Navigation", [][2]string{
+		{"↑↓ / j k", "Move cursor"},
+		{"PgUp / PgDn", "Half page"},
+		{"g / G", "Top / bottom"},
+		{"n / N", "Next / prev search match (text views)"},
+	}))
+	sb.WriteByte('\n')
+
+	sb.WriteString(section("Command palette (:)", [][2]string{
+		{":nodes", "Node list"},
+		{":health", "Cluster health"},
+		{":disks", "Disks (+ LVM)"},
+		{":lvm", "LVM: PV / VG / LV"},
+		{":svc :ext :mc", "Services / extensions / machine config"},
+		{":metrics :procs", "Metrics / processes"},
+		{":containers :addr", "Containers / addresses"},
+		{":dmesg :ctx", "Dmesg / context switcher"},
+		{":<resource>", "Any talosctl resource (e.g. :mounts, :routes, :members)"},
 	}))
 	sb.WriteByte('\n')
 
@@ -98,17 +127,32 @@ func buildHelpContent() string {
 	}))
 	sb.WriteByte('\n')
 
+	sb.WriteString(section("LVM / Resource browser", [][2]string{
+		{"↑↓ / j k", "Scroll"},
+		{"g / G", "Top / bottom"},
+		{"r", "Refresh"},
+		{"Esc / q", "Back"},
+	}))
+	sb.WriteByte('\n')
+
 	sb.WriteString(section("Extension Catalog", [][2]string{
 		{"↑↓ / j k", "Navigate"},
 		{"Esc / q", "Back"},
 	}))
 	sb.WriteByte('\n')
 
-	sb.WriteString(section("Upgrade", [][2]string{
-		{"type", "Enter image / version"},
-		{"↵", "Confirm"},
-		{"y / n", "Yes / No on confirm step"},
-		{"Esc", "Abort / back"},
+	sb.WriteString(section("Upgrade Talos (U)", [][2]string{
+		{"type", "Installer image, pre-filled with the node's version"},
+		{"p", "Toggle --preserve (keep data partition; on by default)"},
+		{"↵ then y", "Confirm and start; streams progress, node reboots"},
+		{"Esc", "Back (upgrade keeps running if already started)"},
+	}))
+	sb.WriteByte('\n')
+
+	sb.WriteString(section("Upgrade Kubernetes (K)", [][2]string{
+		{"type", "Target version, pre-filled from the running control plane"},
+		{"↵ then y", "Confirm; talosctl upgrade-k8s rolls every node"},
+		{"Esc", "Back (upgrade keeps running if already started)"},
 	}))
 	sb.WriteByte('\n')
 
