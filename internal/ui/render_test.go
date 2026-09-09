@@ -643,3 +643,30 @@ func TestVisibleDisksHidesLVDeviceMapperNodes(t *testing.T) {
 		}
 	}
 }
+
+func TestHintRowsPackTightly(t *testing.T) {
+	app := newTestApp(160, 40) // node list: 6 short hints
+	rows := app.hintRows()
+	if len(rows) != 1 {
+		t.Errorf("6 hints should fit on one line at w=160, got %d rows: %v", len(rows), rows)
+	}
+	if got := app.hintsHeight(); got != len(rows) {
+		t.Errorf("hintsHeight()=%d disagrees with hintRows()=%d", got, len(rows))
+	}
+
+	// Narrow terminals wrap, but never past the 3-row cap and never wider
+	// than the terminal.
+	for _, w := range []int{40, 60, 80, 100, 200} {
+		app := newTestApp(w, 40)
+		rows := app.hintRows()
+		if len(rows) > 3 {
+			t.Errorf("w=%d: %d rows exceeds the cap", w, len(rows))
+		}
+		if got := maxLineWidth(app.renderHintsPanel()); got > w {
+			t.Errorf("w=%d: hint line is %d wide", w, got)
+		}
+		if app.hintsHeight() != len(rows) {
+			t.Errorf("w=%d: hintsHeight disagrees with hintRows", w)
+		}
+	}
+}
