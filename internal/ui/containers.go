@@ -11,20 +11,13 @@ import (
 )
 
 func (app App) handleContainersKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.contCur, len(app.containers), app.mainHeight()-3) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
-	case "up", "k":
-		if app.contCur > 0 {
-			app.contCur--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.contCur, len(app.containers), app.mainHeight()-3)
-		}
-	case "down", "j":
-		if app.contCur < len(app.containers)-1 {
-			app.contCur++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.contCur, len(app.containers), app.mainHeight()-3)
-		}
 	case "r":
 		if app.selNode != nil {
 			app.contLoading = true

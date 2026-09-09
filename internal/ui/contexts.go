@@ -9,22 +9,13 @@ import (
 )
 
 func (app App) handleContextsKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.ctxCur, len(app.filteredContexts()), app.mainHeight()-3) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
-
-	case "up", "k":
-		if app.ctxCur > 0 {
-			app.ctxCur--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.ctxCur, len(app.filteredContexts()), app.mainHeight()-3)
-		}
-
-	case "down", "j":
-		if app.ctxCur < len(app.filteredContexts())-1 {
-			app.ctxCur++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.ctxCur, len(app.filteredContexts()), app.mainHeight()-3)
-		}
 
 	case "enter":
 		ctxs := app.filteredContexts()

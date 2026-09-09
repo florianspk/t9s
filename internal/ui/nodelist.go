@@ -8,22 +8,13 @@ import (
 )
 
 func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.nodeCur, len(app.filteredNodes()), app.mainHeight()-2) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c", "q":
 		app.cleanup()
 		return app, tea.Quit
-
-	case "up", "k":
-		if app.nodeCur > 0 {
-			app.nodeCur--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.nodeCur, len(app.filteredNodes()), app.mainHeight()-2)
-		}
-
-	case "down", "j":
-		if app.nodeCur < len(app.filteredNodes())-1 {
-			app.nodeCur++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.nodeCur, len(app.filteredNodes()), app.mainHeight()-2)
-		}
 
 	case "enter", "s":
 		n := app.selectedNode()

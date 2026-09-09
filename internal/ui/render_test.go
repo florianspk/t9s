@@ -670,3 +670,44 @@ func TestHintRowsPackTightly(t *testing.T) {
 		}
 	}
 }
+
+func TestScrollCursor(t *testing.T) {
+	app := newTestApp(120, 30)
+	cur := 0
+	const n, rows = 50, 10
+
+	for _, tc := range []struct {
+		key  string
+		want int
+	}{
+		{"down", 1}, {"j", 2}, {"up", 1}, {"k", 0},
+		{"up", 0},       // clamps at the top
+		{"G", n - 1},    // bottom
+		{"down", n - 1}, // clamps at the bottom
+		{"g", 0},        // top
+		{"pgdown", rows / 2},
+		{"pgup", 0},
+	} {
+		if !app.scrollCursor(tc.key, &cur, n, rows) {
+			t.Fatalf("%q should be handled", tc.key)
+		}
+		if cur != tc.want {
+			t.Errorf("after %q: cur=%d, want %d", tc.key, cur, tc.want)
+		}
+	}
+
+	if app.scrollCursor("enter", &cur, n, rows) {
+		t.Error("non-scrolling keys must fall through")
+	}
+
+	// The window always keeps the cursor visible.
+	for _, c := range []int{0, 7, 25, n - 1} {
+		cur = c
+		app.scrollCursor("g", &cur, n, rows)
+		cur = c
+		app.scrollCursor("down", &cur, n, rows)
+		if cur < app.viewScrollStart || cur >= app.viewScrollStart+rows {
+			t.Errorf("cursor %d outside window [%d,%d)", cur, app.viewScrollStart, app.viewScrollStart+rows)
+		}
+	}
+}

@@ -43,10 +43,8 @@ func (app App) handleResourceBrowserKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	}
 
 	n := len(app.browser.lines)
-	maxRows := max(1, app.mainHeight()-3)
-
-	scroll := func() {
-		app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, n, maxRows)
+	if app.scrollList(msg.String(), n) {
+		return app, nil
 	}
 
 	switch msg.String() {
@@ -83,28 +81,6 @@ func (app App) handleResourceBrowserKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app.browser.listScroll, app.browser.listStart = app.listScroll, app.viewScrollStart
 		app.listScroll, app.viewScrollStart = 0, 0
 		return app, app.loadResourceYAML(app.browser.kind, id, node)
-	case "up", "k":
-		if app.listScroll > 0 {
-			app.listScroll--
-		}
-		scroll()
-	case "down", "j":
-		if app.listScroll < n-1 {
-			app.listScroll++
-		}
-		scroll()
-	case "pgup":
-		app.listScroll = max(0, app.listScroll-maxRows/2)
-		scroll()
-	case "pgdown":
-		app.listScroll = min(max(0, n-1), app.listScroll+maxRows/2)
-		scroll()
-	case "g":
-		app.listScroll = 0
-		scroll()
-	case "G":
-		app.listScroll = max(0, n-1)
-		scroll()
 	}
 	return app, nil
 }
@@ -112,10 +88,8 @@ func (app App) handleResourceBrowserKey(msg tea.KeyMsg) (App, tea.Cmd) {
 // handleResourceDetailKey drives the drill-in YAML pane; Esc returns to the
 // listing rather than leaving the view.
 func (app App) handleResourceDetailKey(msg tea.KeyMsg) (App, tea.Cmd) {
-	n := len(app.browser.detail)
-	maxRows := max(1, app.mainHeight()-3)
-	scroll := func() {
-		app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, n, maxRows)
+	if app.scrollList(msg.String(), len(app.browser.detail)) {
+		return app, nil
 	}
 
 	switch msg.String() {
@@ -132,28 +106,6 @@ func (app App) handleResourceDetailKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	case "r":
 		app.browser.detailLoad = true
 		return app, app.loadResourceYAML(app.browser.kind, app.browser.detailID, "")
-	case "up", "k":
-		if app.listScroll > 0 {
-			app.listScroll--
-		}
-		scroll()
-	case "down", "j":
-		if app.listScroll < n-1 {
-			app.listScroll++
-		}
-		scroll()
-	case "pgup":
-		app.listScroll = max(0, app.listScroll-maxRows/2)
-		scroll()
-	case "pgdown":
-		app.listScroll = min(max(0, n-1), app.listScroll+maxRows/2)
-		scroll()
-	case "g":
-		app.listScroll = 0
-		scroll()
-	case "G":
-		app.listScroll = max(0, n-1)
-		scroll()
 	}
 	return app, nil
 }

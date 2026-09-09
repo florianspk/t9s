@@ -9,11 +9,8 @@ import (
 )
 
 func (app App) handleLVMKey(msg tea.KeyMsg) (App, tea.Cmd) {
-	lines := app.lvmLines()
-	n := len(lines)
-	maxRows := max(1, app.mainHeight()-3)
-	scroll := func() {
-		app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, n, maxRows)
+	if app.scrollList(msg.String(), len(app.lvmLines())) {
+		return app, nil
 	}
 
 	switch msg.String() {
@@ -36,28 +33,6 @@ func (app App) handleLVMKey(msg tea.KeyMsg) (App, tea.Cmd) {
 			app = app.goTo(StateMachineConfig)
 			return app, app.loadMachineConfig()
 		}
-	case "up", "k":
-		if app.listScroll > 0 {
-			app.listScroll--
-		}
-		scroll()
-	case "down", "j":
-		if app.listScroll < n-1 {
-			app.listScroll++
-		}
-		scroll()
-	case "pgup":
-		app.listScroll = max(0, app.listScroll-maxRows/2)
-		scroll()
-	case "pgdown":
-		app.listScroll = min(max(0, n-1), app.listScroll+maxRows/2)
-		scroll()
-	case "g":
-		app.listScroll = 0
-		scroll()
-	case "G":
-		app.listScroll = max(0, n-1)
-		scroll()
 	}
 	return app, nil
 }

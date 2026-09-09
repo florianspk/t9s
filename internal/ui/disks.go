@@ -33,21 +33,13 @@ func (app App) visibleDisks() []talos.DiskInfo {
 }
 
 func (app App) handleDisksKey(msg tea.KeyMsg) (App, tea.Cmd) {
-	nDisks := len(app.visibleDisks())
+	if app.scrollCursor(msg.String(), &app.listScroll, len(app.visibleDisks()), app.mainHeight()-3) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
-	case "up", "k":
-		if app.listScroll > 0 {
-			app.listScroll--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, nDisks, app.mainHeight()-3)
-		}
-	case "down", "j":
-		if app.listScroll < nDisks-1 {
-			app.listScroll++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, nDisks, app.mainHeight()-3)
-		}
 	case "r":
 		if app.selNode != nil {
 			app.diskLoading = true

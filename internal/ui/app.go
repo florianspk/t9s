@@ -1430,6 +1430,40 @@ func computeScrollStart(cur, total, maxRows int) int {
 	return start
 }
 
+// scrollList applies a cursor-movement key to the shared listScroll cursor.
+// It reports whether the key was a scrolling key, so callers fall through to
+// their own bindings.
+func (app *App) scrollList(key string, n int) bool {
+	return app.scrollCursor(key, &app.listScroll, n, max(1, app.mainHeight()-3))
+}
+
+// scrollCursor is scrollList for views that keep their own cursor field or
+// need a different row budget.
+func (app *App) scrollCursor(key string, cur *int, n, maxRows int) bool {
+	switch key {
+	case "up", "k":
+		if *cur > 0 {
+			*cur--
+		}
+	case "down", "j":
+		if *cur < n-1 {
+			*cur++
+		}
+	case "pgup":
+		*cur = max(0, *cur-maxRows/2)
+	case "pgdown":
+		*cur = min(max(0, n-1), *cur+maxRows/2)
+	case "g":
+		*cur = 0
+	case "G":
+		*cur = max(0, n-1)
+	default:
+		return false
+	}
+	app.viewScrollStart = clampScrollStart(app.viewScrollStart, *cur, n, maxRows)
+	return true
+}
+
 // clampScrollStart adjusts prevStart so that cur stays within the visible
 // window [prevStart, prevStart+maxRows). The window only shifts when the
 // cursor hits a boundary — it stays still while the cursor moves freely

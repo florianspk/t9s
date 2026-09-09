@@ -9,20 +9,13 @@ import (
 )
 
 func (app App) handleAddressesKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.listScroll, len(app.addresses), app.mainHeight()-3) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
-	case "up", "k":
-		if app.listScroll > 0 {
-			app.listScroll--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.addresses), app.mainHeight()-3)
-		}
-	case "down", "j":
-		if app.listScroll < len(app.addresses)-1 {
-			app.listScroll++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.addresses), app.mainHeight()-3)
-		}
 	case "r":
 		if app.selNode != nil {
 			app.addrLoading = true
