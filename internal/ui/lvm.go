@@ -25,7 +25,7 @@ func (app App) handleLVMKey(msg tea.KeyMsg) (App, tea.Cmd) {
 			app.lvm.load = true
 			return app, app.loadLVM()
 		}
-	case "e":
+	case "c":
 		// LVM is declared in the machine config; edit it there.
 		if app.selNode != nil {
 			app.machConf, app.machLoading = "", true
@@ -100,7 +100,7 @@ func (app App) lvmLines() []string {
 
 	// Desired state, from the machine config's LVM* documents.
 	if len(app.lvm.vgCfgs) > 0 || len(app.lvm.lvCfgs) > 0 {
-		out = append(out, "", colHeaderStyle.Render("CONFIG")+dimStyle.Render("   (from the machine config — press e to open it)"))
+		out = append(out, "", colHeaderStyle.Render("CONFIG")+dimStyle.Render("   (from the machine config — press c to open it)"))
 		if len(app.lvm.vgCfgs) > 0 {
 			out = append(out, dimStyle.Render(row(col("VOLUME GROUP", 22), "PHYSICAL VOLUMES")))
 			for _, v := range app.lvm.vgCfgs {
