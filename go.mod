@@ -1,6 +1,6 @@
 module github.com/florianspk/t9s
 
-go 1.25.11
+go 1.26.8
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0

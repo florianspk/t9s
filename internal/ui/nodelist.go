@@ -28,6 +28,18 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app = app.goTo(StateServices)
 		return app, app.loadServices()
 
+	case "l":
+		n := app.selectedNode()
+		if n == nil {
+			return app, nil
+		}
+		app.selNode = n
+		app.logStreams = nil
+		app.logStreamCur = 0
+		app.statusMsg = "Loading log streams..."
+		app = app.goTo(StateLogStreams)
+		return app.startLogStreamsLoad()
+
 	case "e":
 		n := app.selectedNode()
 		if n == nil {

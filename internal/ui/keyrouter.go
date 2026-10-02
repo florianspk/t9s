@@ -70,7 +70,7 @@ func (app App) handleKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	// Global search: activate on '/' for list-based views
 	if msg.String() == "/" {
 		switch app.state {
-		case StateNodeList, StateServices, StateExtensions, StateExtCatalog,
+		case StateNodeList, StateServices, StateLogStreams, StateExtensions, StateExtCatalog,
 			StateMetrics, StateContextSwitcher:
 			app.searchActive = true
 			app.searchInput.Reset()
@@ -111,6 +111,8 @@ func (app App) handleKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		return app.handleNodeListKey(msg)
 	case StateServices:
 		return app.handleServicesKey(msg)
+	case StateLogStreams:
+		return app.handleLogStreamsKey(msg)
 	case StateLogs:
 		return app.handleLogsKey(msg)
 	case StateMachineConfig:

@@ -8,16 +8,6 @@ import (
 	"github.com/muesli/reflow/wrap"
 )
 
-func waitForLine(ch <-chan string) tea.Cmd {
-	return func() tea.Msg {
-		line, ok := <-ch
-		if !ok {
-			return logDoneMsg{}
-		}
-		return logLineMsg(line)
-	}
-}
-
 func (app App) handleLogsKey(msg tea.KeyMsg) (App, tea.Cmd) {
 	if app.findActive {
 		var cmd tea.Cmd

@@ -29,7 +29,7 @@ The aim of this project is to make it easier to navigate, observe and manage you
 
 - 🖥️ **Full-screen responsive layout** — adapts to any terminal size, columns expand with the window
 - 📋 **Node list** — Talos version, Kubernetes version, role and status at a glance
-- 📡 **Live streaming** — services, logs and dmesg with an interactive ▶ cursor
+- 📡 **Live streaming:** service logs, dynamically discovered node log streams and dmesg with an interactive ▶ cursor
 - 🔍 **Per-node resource views** — disks, processes, containers, network addresses
 - 📊 **Metrics** — CPU/RAM stats with delta, auto-refreshed every 5s
 - 📄 **Machine config** — read-only YAML viewer
@@ -111,6 +111,7 @@ sudo mv t9s /usr/local/bin/
 |---------|---------|-----------------|
 | Node list | `talosctl get members -o json` | 1.0 |
 | Services | `talosctl services` | 1.0 |
+| Log stream discovery | `talosctl __completeNoDesc logs --nodes=<node> ''` (falls back to `__complete`) | n/a |
 | Logs | `talosctl logs -f` | 1.0 |
 | Dmesg | `talosctl dmesg -f` | 1.0 |
 | Machine config | `talosctl get machineconfig -o yaml` | 1.0 |
@@ -167,12 +168,25 @@ t9s uses aliases to navigate most Talos resources — hit `?` at any time for th
 |-----|--------|-|-----|--------|
 | <kbd>↑</kbd><kbd>↓</kbd> / <kbd>j</kbd><kbd>k</kbd> | Navigate | | <kbd>t</kbd> | Metrics |
 | <kbd>Enter</kbd> / <kbd>s</kbd> | Services | | <kbd>p</kbd> | Processes |
-| <kbd>e</kbd> | Extensions | | <kbd>c</kbd> | Containers |
-| <kbd>C</kbd> | Extension catalog | | <kbd>a</kbd> | Network addresses |
-| <kbd>m</kbd> | Machine config | | <kbd>i</kbd> | Disks |
-| <kbd>d</kbd> | Dmesg | | <kbd>H</kbd> | Cluster health |
-| <kbd>U</kbd> | Upgrade Talos | | <kbd>R</kbd> / <kbd>S</kbd> | Reboot / Shutdown |
-| <kbd>K</kbd> | Upgrade Kubernetes | | <kbd>r</kbd> | Refresh |
+| <kbd>l</kbd> | Log Streams | | <kbd>c</kbd> | Containers |
+| <kbd>e</kbd> | Extensions | | <kbd>a</kbd> | Network addresses |
+| <kbd>C</kbd> | Extension catalog | | <kbd>i</kbd> | Disks |
+| <kbd>m</kbd> | Machine config | | <kbd>d</kbd> | Dmesg |
+| <kbd>H</kbd> | Cluster health | | <kbd>R</kbd> / <kbd>S</kbd> | Reboot / Shutdown |
+| <kbd>U</kbd> | Upgrade Talos | | <kbd>K</kbd> | Upgrade Kubernetes |
+| <kbd>r</kbd> | Refresh | | | |
+
+### Log Streams
+
+| Key | Action |
+|-----|--------|
+| <kbd>↑</kbd><kbd>↓</kbd> / <kbd>j</kbd><kbd>k</kbd> | Navigate |
+| <kbd>PgUp</kbd> / <kbd>PgDn</kbd> | Page up / down |
+| <kbd>Home</kbd> / <kbd>End</kbd> / <kbd>g</kbd> / <kbd>G</kbd> | Top / bottom |
+| <kbd>Enter</kbd> | Open live logs for the selected stream |
+| <kbd>/</kbd> | Filter streams |
+| <kbd>r</kbd> | Reload streams |
+| <kbd>Esc</kbd> / <kbd>q</kbd> | Back |
 
 ### Logs / Dmesg / Health
 
@@ -200,8 +214,9 @@ t9s uses aliases to navigate most Talos resources — hit `?` at any time for th
 | View | Key | What it shows |
 |------|-----|---------------|
 | Nodes | *default* | Members — Talos + K8s version, role, status |
-| Services | <kbd>s</kbd> | Service state and health |
-| Logs | <kbd>l</kbd> | Live service log stream |
+| Services | <kbd>s</kbd> | Service state and health. <kbd>Enter</kbd> or <kbd>l</kbd> opens that service's live logs |
+| Log Streams | <kbd>l</kbd> | Node log targets discovered from talosctl completion |
+| Logs | <kbd>Enter</kbd> | Live logs for the selected service or log stream |
 | Dmesg | <kbd>d</kbd> | Live kernel log stream |
 | Machine Config | <kbd>m</kbd> | Machine config YAML |
 | Extensions | <kbd>e</kbd> | Installed Talos extensions |

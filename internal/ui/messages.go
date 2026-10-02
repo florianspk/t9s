@@ -18,6 +18,13 @@ type servicesLoadedMsg struct {
 	err      error
 }
 
+type logStreamsLoadedMsg struct {
+	streams  []string
+	nodeIP   string
+	sequence uint64
+	err      error
+}
+
 type extensionsLoadedMsg struct {
 	extensions []talos.Extension
 	err        error
@@ -100,8 +107,14 @@ type actionDoneMsg struct {
 	err    error
 }
 
-type logLineMsg string
-type logDoneMsg struct{}
+type logLineMsg struct {
+	line       string
+	sessionSeq uint64
+}
+
+type logDoneMsg struct {
+	sessionSeq uint64
+}
 
 type dmesgLineMsg string
 type dmesgDoneMsg struct{}

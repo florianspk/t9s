@@ -82,6 +82,7 @@ func buildHelpContent() string {
 	sb.WriteString(section("Node List", [][2]string{
 		{"↑↓ / j k", "Navigate"},
 		{"↵ / s", "Services"},
+		{"l", "Log streams"},
 		{"e", "Extensions (installed)"},
 		{"C", "Extension catalog"},
 		{"m", "Machine config"},
@@ -103,6 +104,17 @@ func buildHelpContent() string {
 	sb.WriteString(section("Services", [][2]string{
 		{"↑↓ / j k", "Navigate"},
 		{"↵ / l", "Stream logs"},
+		{"Esc / q", "Back"},
+	}))
+	sb.WriteByte('\n')
+
+	sb.WriteString(section("Log Streams", [][2]string{
+		{"↑↓ / j k", "Navigate"},
+		{"PgUp / PgDn", "Page up / down"},
+		{"Home / End / g / G", "Top / bottom"},
+		{"↵", "Stream selected logs"},
+		{"/", "Filter streams"},
+		{"r", "Reload streams"},
 		{"Esc / q", "Back"},
 	}))
 	sb.WriteByte('\n')

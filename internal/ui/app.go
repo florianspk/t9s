@@ -21,6 +21,7 @@ type AppState int
 const (
 	StateNodeList AppState = iota
 	StateServices
+	StateLogStreams
 	StateLogs
 	StateMachineConfig
 	StateExtensions
@@ -78,14 +79,23 @@ type App struct {
 	svcCur     int
 	svcLoading bool
 
+	// Log streams
+	logStreams           []string
+	logStreamCur         int
+	logStreamLoading     bool
+	logStreamRequestNode string
+	logStreamRequestSeq  uint64
+
 	// Logs
-	logLines     []string
-	logCh        chan string
-	logCtx       context.Context
-	logCancel    context.CancelFunc
-	logVP        viewport.Model
-	logService   string
-	logStreaming bool
+	logLines      []string
+	logCh         chan string
+	logCtx        context.Context
+	logCancel     context.CancelFunc
+	logVP         viewport.Model
+	logService    string
+	logStreaming  bool
+	logSessionSeq uint64
+	runLogStream  func(context.Context, string, string, chan<- string)
 
 	// Machine config
 	machConf      string // raw full YAML from talosctl
@@ -249,6 +259,8 @@ type resourceBrowser struct {
 }
 
 func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
+	client := talos.New(cfgPath, talosCtx)
+
 	ti := textinput.New()
 	ti.Placeholder = "ghcr.io/siderolabs/installer:v1.6.x"
 	ti.CharLimit = 256
@@ -272,7 +284,7 @@ func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 		cfg:          cfg,
 		cfgPath:      cfgPath,
 		talosCtx:     talosCtx,
-		client:       talos.New(cfgPath, talosCtx),
+		client:       client,
 		state:        StateNodeList,
 		upgradeInput: ti,
 		searchInput:  si,
@@ -285,6 +297,7 @@ func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 		upgradeVP:    viewport.New(80, 20),
 		healthVP:     viewport.New(80, 20),
 		helpVP:       viewport.New(80, 20),
+		runLogStream: client.StreamLogs,
 	}
 }
 
@@ -386,6 +399,27 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.services = msg.services
 			app.svcCur = 0
 			app.statusMsg = fmt.Sprintf("%d services", len(msg.services))
+		}
+		return app, nil
+
+	case logStreamsLoadedMsg:
+		pickerOwnsReply := app.state == StateLogStreams ||
+			(app.navTop() == StateLogStreams && (app.state == StateHelp || app.state == StateContextSwitcher))
+		if !pickerOwnsReply ||
+			app.selNode == nil ||
+			app.selNode.IP != msg.nodeIP ||
+			app.logStreamRequestNode != msg.nodeIP ||
+			app.logStreamRequestSeq != msg.sequence {
+			return app, nil
+		}
+		app.logStreamLoading = false
+		if msg.err != nil {
+			app.statusMsg = errStyle.Render("Error: " + msg.err.Error())
+		} else {
+			app.logStreams = msg.streams
+			app.logStreamCur = 0
+			app.viewScrollStart = 0
+			app.statusMsg = fmt.Sprintf("%d log streams", len(msg.streams))
 		}
 		return app, nil
 
@@ -635,17 +669,20 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return app, nil
 
 	case logLineMsg:
-		if app.logStreaming {
+		if app.logStreaming && msg.sessionSeq == app.logSessionSeq {
 			wasAtLast := len(app.logLines) == 0 || app.logCur >= len(app.logLines)-1
-			app.logLines = append(app.logLines, string(msg))
+			app.logLines = append(app.logLines, msg.line)
 			if wasAtLast {
 				app.logCur = len(app.logLines) - 1
 			}
-			return app, waitForLine(app.logCh)
+			return app, waitForLine(app.logCh, msg.sessionSeq)
 		}
 		return app, nil
 
 	case logDoneMsg:
+		if msg.sessionSeq != app.logSessionSeq {
+			return app, nil
+		}
 		app.logStreaming = false
 		return app, nil
 
@@ -834,6 +871,10 @@ func resourceLine(app App) string {
 		if app.selNode != nil {
 			return fmt.Sprintf("Services › %s (%d)", app.selNode.Hostname, len(app.services))
 		}
+	case StateLogStreams:
+		if app.selNode != nil {
+			return fmt.Sprintf("Log Streams › %s (%d)", app.selNode.Hostname, len(app.logStreams))
+		}
 	case StateLogs:
 		if app.selNode != nil {
 			return fmt.Sprintf("Logs › %s › %s", app.selNode.Hostname, app.logService)
@@ -921,6 +962,8 @@ func stateName(s AppState) string {
 		return "Nodes"
 	case StateServices:
 		return "Services"
+	case StateLogStreams:
+		return "Log Streams"
 	case StateLogs:
 		return "Logs"
 	case StateMachineConfig:
@@ -1011,6 +1054,8 @@ func (app App) renderMain(height int) string {
 		return app.renderNodeList(height)
 	case StateServices:
 		return app.renderServices(height)
+	case StateLogStreams:
+		return app.renderLogStreams(height)
 	case StateLogs:
 		return app.renderLogs(height)
 	case StateMachineConfig:
@@ -1601,6 +1646,15 @@ func (app App) goBack() App {
 }
 
 // crumbs flattens the nav stack (plus the current view) into breadcrumb labels.
+// navTop is the state goBack would return to, or StateNodeList when the
+// stack is empty.
+func (app App) navTop() AppState {
+	if n := len(app.navStack); n > 0 {
+		return app.navStack[n-1].state
+	}
+	return StateNodeList
+}
+
 func (app App) crumbs() []string {
 	out := make([]string, 0, len(app.navStack)+1)
 	for _, e := range app.navStack {

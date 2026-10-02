@@ -138,6 +138,14 @@ func (app *App) clampCursor() {
 		app.nodeCur = clamp(app.nodeCur, 0, max(0, len(app.filteredNodes())-1))
 	case StateServices:
 		app.svcCur = clamp(app.svcCur, 0, max(0, len(app.filteredServices())-1))
+	case StateLogStreams:
+		app.logStreamCur = clamp(app.logStreamCur, 0, max(0, len(app.filteredLogStreams())-1))
+		app.viewScrollStart = clampScrollStart(
+			app.viewScrollStart,
+			app.logStreamCur,
+			len(app.filteredLogStreams()),
+			max(1, app.mainHeight()-3),
+		)
 	case StateExtensions:
 		app.extCur = clamp(app.extCur, 0, max(0, len(app.filteredExtensions())-1))
 	case StateExtCatalog:

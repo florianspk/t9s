@@ -33,6 +33,7 @@ func stateHints(app App) []hint {
 		return []hint{
 			{"↑↓", "Navigate"},
 			{"↵/s", "Services"},
+			{"l", "Log streams"},
 			{"i", "Disks"},
 			{":", "Command"},
 			{"?", "All shortcuts"},
@@ -43,6 +44,14 @@ func stateHints(app App) []hint {
 			{"↑↓", "Navigate"},
 			{"↵/l", "Logs"},
 			{"?", "All shortcuts"},
+			{"Esc/q", "Back"},
+		}
+	case StateLogStreams:
+		return []hint{
+			{"↑↓", "Navigate"},
+			{"↵", "Stream logs"},
+			{"/", "Filter"},
+			{"r", "Reload"},
 			{"Esc/q", "Back"},
 		}
 	case StateLogs, StateDmesg:

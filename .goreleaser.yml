@@ -53,8 +53,6 @@ homebrew_casks:
       - t9s
     binaries:
       - t9s
-    url:
-      verified: "github.com/florianspk/t9s/"
     directory: Casks
     commit_author:
       name: goreleaserbot

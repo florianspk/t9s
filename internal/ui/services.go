@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,24 +21,7 @@ func (app App) handleServicesKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		if len(svcs) == 0 || app.selNode == nil {
 			return app, nil
 		}
-		svc := svcs[app.svcCur]
-		app.logService = svc.ID
-		app.logLines = nil
-		app.logCur = 0
-		app.logStreaming = true
-		app = app.goTo(StateLogs)
-		app.logCh = make(chan string, 500)
-		app.logCtx, app.logCancel = context.WithCancel(context.Background())
-		client := app.client
-		node := app.selNode.IP
-		service := app.logService
-		logCh := app.logCh
-		logCtx := app.logCtx
-		go func() {
-			defer close(logCh)
-			client.StreamLogs(logCtx, node, service, logCh)
-		}()
-		return app, waitForLine(app.logCh)
+		return app.startLogStream(svcs[app.svcCur].ID)
 
 	case "esc", "q":
 		app = app.goBack()
