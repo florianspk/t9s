@@ -37,6 +37,8 @@ const (
 	StateAddresses
 	StateHealth
 	StateHelp
+	StateLVM
+	StateResourceBrowser
 )
 
 const (
@@ -54,7 +56,10 @@ type App struct {
 	client   *talos.Client
 
 	state AppState
-	prev  AppState
+
+	// navStack is the breadcrumb / history stack. goTo pushes the current
+	// {state, node}; goBack pops it. Replaces the old single-level app.prev.
+	navStack []navEntry
 
 	statusMsg   string
 	clientVer   string // talosctl binary version
@@ -89,7 +94,6 @@ type App struct {
 	logVP         viewport.Model
 	logService    string
 	logStreaming  bool
-	logOrigin     AppState
 	logSessionSeq uint64
 	runLogStream  func(context.Context, string, string, chan<- string)
 
@@ -131,16 +135,15 @@ type App struct {
 	statsLoading bool
 
 	// Upgrade
-	upgradeInput    textinput.Model
-	upgradeLines    []string
-	upgradeCh       chan string
-	upgradeCtx      context.Context
-	upgradeCancel   context.CancelFunc
-	upgradeVP       viewport.Model
-	upgradeForK8s   bool
-	upgradePreserve bool
-	upgradeConfirm  bool
-	upgradeRunning  bool
+	upgradeInput   textinput.Model
+	upgradeLines   []string
+	upgradeCh      chan string
+	upgradeCtx     context.Context
+	upgradeCancel  context.CancelFunc
+	upgradeVP      viewport.Model
+	upgradeForK8s  bool
+	upgradeConfirm bool
+	upgradeRunning bool
 
 	// Context switcher
 	contexts []string
@@ -154,6 +157,10 @@ type App struct {
 	disks       []talos.DiskInfo
 	diskLoading bool
 	volumes     []talos.VolumeInfo // loaded alongside disks
+
+	lvm     lvmState
+	palette cmdPalette
+	browser resourceBrowser
 
 	// Processes
 	processes   []talos.ProcessInfo
@@ -209,6 +216,48 @@ type App struct {
 	findQuery  string
 }
 
+// lvmState is the :lvm view: observed status plus the desired state declared
+// by the machine config's LVM* documents.
+type lvmState struct {
+	pvs    []talos.LVMPhysicalVolume
+	vgs    []talos.LVMVolumeGroup
+	lvs    []talos.LVMLogicalVolume
+	vgCfgs []talos.LVMVolumeGroupConfig
+	lvCfgs []talos.LVMLogicalVolumeConfig
+	errors []talos.LVMValidationError
+	lines  []string // rendered body, rebuilt when the data changes
+	err    error
+	load   bool
+}
+
+// cmdPalette is the ":" prompt and its completion state.
+type cmdPalette struct {
+	input    textinput.Model
+	active   bool
+	err      string
+	kinds    []string // resource names/aliases from `talosctl get rd`
+	matches  []string // completions for the current input
+	matchIdx int
+}
+
+// resourceBrowser is the generic `talosctl get <kind>` viewer, plus the
+// drill-in pane showing one resource as YAML.
+type resourceBrowser struct {
+	kind  string
+	lines []string
+	err   string
+	load  bool
+	yaml  bool // whole listing rendered as YAML instead of a table
+
+	detail     []string
+	detailID   string
+	detailErr  string
+	detailLoad bool
+
+	listScroll int // listing scroll stashed while the detail is open
+	listStart  int
+}
+
 func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 	client := talos.New(cfgPath, talosCtx)
 
@@ -226,6 +275,11 @@ func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 	fi.CharLimit = 100
 	fi.Prompt = ""
 
+	ci := textinput.New()
+	ci.Placeholder = "nodes, health, lvm, mounts, routes…"
+	ci.CharLimit = 100
+	ci.Prompt = ""
+
 	return App{
 		cfg:          cfg,
 		cfgPath:      cfgPath,
@@ -235,6 +289,7 @@ func New(cfg *config.TalosConfig, cfgPath, talosCtx string) App {
 		upgradeInput: ti,
 		searchInput:  si,
 		findInput:    fi,
+		palette:      cmdPalette{input: ci},
 		contexts:     cfg.ContextNames(),
 		logVP:        viewport.New(80, 20),
 		dmesgVP:      viewport.New(80, 20),
@@ -349,7 +404,7 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case logStreamsLoadedMsg:
 		pickerOwnsReply := app.state == StateLogStreams ||
-			(app.prev == StateLogStreams && (app.state == StateHelp || app.state == StateContextSwitcher))
+			(app.navTop() == StateLogStreams && (app.state == StateHelp || app.state == StateContextSwitcher))
 		if !pickerOwnsReply ||
 			app.selNode == nil ||
 			app.selNode.IP != msg.nodeIP ||
@@ -470,6 +525,69 @@ func (app App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case volumesLoadedMsg:
 		if msg.err == nil {
 			app.volumes = msg.volumes
+		}
+		return app, nil
+
+	case lvmLoadedMsg:
+		app.lvm.load = false
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err = msg.pvs, msg.vgs, msg.lvs, msg.err
+		app.lvm.vgCfgs, app.lvm.lvCfgs, app.lvm.errors = msg.vgCfgs, msg.lvCfgs, msg.errors
+		app.lvm.lines = app.lvmLines()
+		if app.state == StateLVM {
+			switch {
+			case msg.err != nil:
+				app.statusMsg = errStyle.Render("LVM: " + msg.err.Error())
+			case len(msg.errors) > 0:
+				app.statusMsg = errStyle.Render(fmt.Sprintf("%d LVM validation error(s)", len(msg.errors)))
+			default:
+				app.statusMsg = fmt.Sprintf("%d VG · %d LV · %d PV", len(msg.vgs), len(msg.lvs), len(msg.pvs))
+			}
+		}
+		return app, nil
+
+	case resourceTableMsg:
+		app.browser.load = false
+		app.browser.kind = msg.kind
+		if msg.err != nil {
+			if msg.err == talos.ErrUnknownResource {
+				app.browser.err = "unknown resource: " + msg.kind
+			} else {
+				app.browser.err = msg.err.Error()
+			}
+			app.browser.lines = nil
+		} else {
+			app.browser.err = ""
+			app.browser.lines = msg.lines
+			if app.browser.yaml {
+				app.statusMsg = fmt.Sprintf("%s: %d lines of YAML", msg.kind, len(msg.lines))
+			} else {
+				app.statusMsg = fmt.Sprintf("%s: %d rows", msg.kind, max(0, len(msg.lines)-1))
+			}
+		}
+		return app, nil
+
+	case resourceKindsMsg:
+		if msg.err == nil {
+			app.palette.kinds = msg.kinds
+			if app.palette.active {
+				app = app.refreshCmdMatches()
+			}
+		}
+		return app, nil
+
+	case resourceYAMLMsg:
+		app.browser.detailLoad = false
+		if msg.err != nil {
+			if msg.err == talos.ErrUnknownResource {
+				app.browser.detailErr = "unknown resource: " + msg.kind
+			} else {
+				app.browser.detailErr = msg.err.Error()
+			}
+			app.browser.detail = nil
+		} else {
+			app.browser.detailErr = ""
+			app.browser.detail = msg.lines
+			app.statusMsg = msg.kind + " / " + msg.id
 		}
 		return app, nil
 
@@ -677,8 +795,16 @@ func (app App) headerHeight() int {
 	return headerBaseH + app.hintsHeight()
 }
 
+// footerHeight is footerH plus one line for the command-palette completions.
+func (app App) footerHeight() int {
+	if app.palette.active && len(app.palette.matches) > 0 {
+		return footerH + 1
+	}
+	return footerH
+}
+
 func (app App) mainHeight() int {
-	h := app.height - app.headerHeight() - footerH
+	h := app.height - app.headerHeight() - app.footerHeight()
 	if h < 1 {
 		h = 1
 	}
@@ -723,7 +849,7 @@ func (app App) renderHeader() string {
 
 	topBar := left + fill + right
 
-	resource := dimStyle.Render("  " + resourceLine(app))
+	resource := app.renderCrumbs() + "  " + dimStyle.Render(resourceLine(app))
 	hints := app.renderHintsPanel()
 	sepLine := strings.Repeat("─", app.width)
 
@@ -797,56 +923,110 @@ func resourceLine(app App) string {
 		}
 	case StateUpgradeK8s:
 		return "Upgrade Kubernetes"
+	case StateLVM:
+		if app.selNode != nil {
+			return fmt.Sprintf("LVM › %s", app.selNode.Hostname)
+		}
+	case StateResourceBrowser:
+		if app.selNode != nil {
+			return fmt.Sprintf("%s › %s", app.browser.kind, app.selNode.Hostname)
+		}
+		return app.browser.kind
 	case StateContextSwitcher:
 		return fmt.Sprintf("Contexts (%d)", len(app.contexts))
 	}
 	return ""
 }
 
-func viewTitle(s AppState) string {
+// renderCrumbs draws the k9s-style breadcrumb chips for the nav stack.
+func (app App) renderCrumbs() string {
+	cr := app.crumbs()
+	active := lipgloss.NewStyle().Background(colorBgSel).Foreground(colorWhite).Bold(true)
+	past := lipgloss.NewStyle().Background(colorBgHead).Foreground(colorGray)
+	var sb strings.Builder
+	for i, c := range cr {
+		st := past
+		if i == len(cr)-1 {
+			st = active
+		}
+		sb.WriteString(" " + st.Render(" ‹"+c+"› "))
+	}
+	return sb.String()
+}
+
+// stateName is the short human label for a view, used by the header, the
+// bordered title bar and (lower-cased) the breadcrumb chips.
+func stateName(s AppState) string {
 	switch s {
 	case StateNodeList:
-		return "[ Nodes ]"
+		return "Nodes"
 	case StateServices:
-		return "[ Services ]"
+		return "Services"
 	case StateLogStreams:
-		return "[ Log Streams ]"
+		return "Log Streams"
 	case StateLogs:
-		return "[ Logs ]"
+		return "Logs"
 	case StateMachineConfig:
-		return "[ Machine Config ]"
+		return "Machine Config"
 	case StateExtensions:
-		return "[ Extensions ]"
+		return "Extensions"
 	case StateExtCatalog:
-		return "[ Ext Catalog ]"
+		return "Ext Catalog"
 	case StateDisks:
-		return "[ Disks ]"
+		return "Disks"
+	case StateLVM:
+		return "LVM"
+	case StateResourceBrowser:
+		return "Resource"
 	case StateProcesses:
-		return "[ Processes ]"
+		return "Processes"
 	case StateContainers:
-		return "[ Containers ]"
+		return "Containers"
 	case StateAddresses:
-		return "[ Addresses ]"
+		return "Addresses"
 	case StateHealth:
-		return "[ Health ]"
+		return "Health"
 	case StateHelp:
-		return "[ Help ]"
+		return "Help"
 	case StateDmesg:
-		return "[ Dmesg ]"
+		return "Dmesg"
 	case StateMetrics:
-		return "[ Metrics ]"
+		return "Metrics"
 	case StateUpgradeTalos:
-		return "[ Upgrade Talos ]"
+		return "Upgrade Talos"
 	case StateUpgradeK8s:
-		return "[ Upgrade K8s ]"
+		return "Upgrade K8s"
 	case StateContextSwitcher:
-		return "[ Contexts ]"
+		return "Contexts"
 	}
 	return ""
 }
 
+func viewTitle(s AppState) string {
+	if n := stateName(s); n != "" {
+		return "[ " + n + " ]"
+	}
+	return ""
+}
+
+// crumbLabel is the lower-cased, space-free breadcrumb form, e.g. "machineconfig".
+func crumbLabel(s AppState) string {
+	return strings.ToLower(strings.ReplaceAll(stateName(s), " ", ""))
+}
+
 func (app App) renderFooter() string {
 	sepLine := strings.Repeat("─", app.width)
+	if app.palette.active {
+		bar := keyStyle.Render(":") + app.palette.input.View()
+		if app.palette.err != "" {
+			bar += "   " + errStyle.Render(app.palette.err)
+		}
+		out := sepLine + "\n  " + bar
+		if m := app.renderCmdMatches(); m != "" {
+			out += "\n  " + m
+		}
+		return out
+	}
 	if app.searchActive {
 		bar := dimStyle.Render("/") + app.searchInput.View()
 		return sepLine + "\n  " + bar
@@ -886,6 +1066,10 @@ func (app App) renderMain(height int) string {
 		return app.renderExtCatalog(height)
 	case StateDisks:
 		return app.renderDisks(height)
+	case StateLVM:
+		return app.renderLVM(height)
+	case StateResourceBrowser:
+		return app.renderResourceBrowser(height)
 	case StateProcesses:
 		return app.renderProcesses(height)
 	case StateContainers:
@@ -994,6 +1178,107 @@ func (app App) loadVolumes() tea.Cmd {
 		defer cancel()
 		vols, err := client.GetVolumeStatus(ctx, node)
 		return volumesLoadedMsg{volumes: vols, err: err}
+	}
+}
+
+func (app App) loadLVM() tea.Cmd {
+	client := app.client
+	if app.selNode == nil {
+		return nil
+	}
+	node := app.selNode.IP
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		pvs, err := client.GetLVMPhysicalVolumes(ctx, node)
+		if err == talos.ErrUnknownResource {
+			return lvmLoadedMsg{} // Talos < 1.14 or LVM extension absent — silent
+		}
+		vgs, verr := client.GetLVMVolumeGroups(ctx, node)
+		lvs, lerr := client.GetLVMLogicalVolumes(ctx, node)
+		vgCfgs, _ := client.GetLVMVolumeGroupConfigs(ctx, node)
+		lvCfgs, _ := client.GetLVMLogicalVolumeConfigs(ctx, node)
+		verrs, _ := client.GetLVMValidationErrors(ctx, node)
+		if err == nil {
+			err = verr
+		}
+		if err == nil {
+			err = lerr
+		}
+		return lvmLoadedMsg{
+			pvs: pvs, vgs: vgs, lvs: lvs,
+			vgCfgs: vgCfgs, lvCfgs: lvCfgs, errors: verrs,
+			err: err,
+		}
+	}
+}
+
+func (app App) loadResourceTable(kind string) tea.Cmd {
+	return app.loadResourceListing(kind, false)
+}
+
+// pseudoKinds are palette names backed by a plain talosctl subcommand rather
+// than a COSI resource, so they have no YAML form and no per-row drill-in.
+var pseudoKinds = map[string][]string{
+	"df": {"mounts"}, // `talosctl mounts` — filesystem usage, unlike `get mounts`
+}
+
+// loadResourceListing fetches the browser listing as a table or as YAML.
+func (app App) loadResourceListing(kind string, asYAML bool) tea.Cmd {
+	client := app.client
+	node := ""
+	if app.selNode != nil {
+		node = app.selNode.IP
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		var (
+			lines []string
+			err   error
+		)
+		switch {
+		case pseudoKinds[kind] != nil:
+			lines, err = client.GetCommandTable(ctx, node, pseudoKinds[kind]...)
+		case asYAML:
+			lines, err = client.GetResourceYAML(ctx, node, kind, "")
+		default:
+			lines, err = client.GetResourceTable(ctx, node, kind)
+		}
+		return resourceTableMsg{kind: kind, lines: lines, err: err}
+	}
+}
+
+// loadResourceKinds caches every resource name/alias the cluster knows so the
+// command palette can complete them. Fetched once, on first ":" press.
+func (app App) loadResourceKinds() tea.Cmd {
+	client := app.client
+	node := ""
+	if app.selNode != nil {
+		node = app.selNode.IP
+	} else if len(app.nodes) > 0 {
+		node = app.nodes[0].IP
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		kinds, err := client.GetResourceKinds(ctx, node)
+		return resourceKindsMsg{kinds: kinds, err: err}
+	}
+}
+
+// loadResourceYAML fetches one resource for the browser's drill-in pane.
+// node may be empty to fall back to the selected node.
+func (app App) loadResourceYAML(kind, id, node string) tea.Cmd {
+	client := app.client
+	if node == "" && app.selNode != nil {
+		node = app.selNode.IP
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		lines, err := client.GetResourceYAML(ctx, node, kind, id)
+		return resourceYAMLMsg{kind: kind, id: id, lines: lines, err: err}
 	}
 }
 
@@ -1191,6 +1476,40 @@ func computeScrollStart(cur, total, maxRows int) int {
 	return start
 }
 
+// scrollList applies a cursor-movement key to the shared listScroll cursor.
+// It reports whether the key was a scrolling key, so callers fall through to
+// their own bindings.
+func (app *App) scrollList(key string, n int) bool {
+	return app.scrollCursor(key, &app.listScroll, n, max(1, app.mainHeight()-3))
+}
+
+// scrollCursor is scrollList for views that keep their own cursor field or
+// need a different row budget.
+func (app *App) scrollCursor(key string, cur *int, n, maxRows int) bool {
+	switch key {
+	case "up", "k":
+		if *cur > 0 {
+			*cur--
+		}
+	case "down", "j":
+		if *cur < n-1 {
+			*cur++
+		}
+	case "pgup":
+		*cur = max(0, *cur-maxRows/2)
+	case "pgdown":
+		*cur = min(max(0, n-1), *cur+maxRows/2)
+	case "g":
+		*cur = 0
+	case "G":
+		*cur = max(0, n-1)
+	default:
+		return false
+	}
+	app.viewScrollStart = clampScrollStart(app.viewScrollStart, *cur, n, maxRows)
+	return true
+}
+
 // clampScrollStart adjusts prevStart so that cur stays within the visible
 // window [prevStart, prevStart+maxRows). The window only shifts when the
 // cursor hits a boundary — it stays still while the cursor moves freely
@@ -1253,8 +1572,36 @@ func clamp(v, lo, hi int) int {
 
 // --- Navigation helpers ---
 
+// navEntry is one frame of the breadcrumb / history stack.
+type navEntry struct {
+	state AppState
+	node  *talos.Node
+}
+
+const maxNavStack = 32
+
 func (app App) goTo(state AppState) App {
-	app.prev = app.state
+	switch {
+	case app.state == state:
+		// no-op re-entry: don't grow the stack
+	default:
+		// Navigating to a view already on the stack collapses the breadcrumb
+		// back to it (e.g. ":nodes" from deep in a drill-down) instead of
+		// stacking a duplicate.
+		if i := app.navIndex(state); i >= 0 {
+			app.selNode = app.navStack[i].node
+			app.navStack = app.navStack[:i]
+		} else {
+			node := app.selNode
+			if app.state == StateNodeList {
+				node = nil // the node list is always cluster-scoped
+			}
+			app.navStack = append(app.navStack, navEntry{state: app.state, node: node})
+			if len(app.navStack) > maxNavStack {
+				app.navStack = app.navStack[len(app.navStack)-maxNavStack:]
+			}
+		}
+	}
 	app.state = state
 	app.searchActive = false
 	app.searchInput.Reset()
@@ -1263,35 +1610,58 @@ func (app App) goTo(state AppState) App {
 	return app
 }
 
+// navIndex returns the stack position of the first frame for state, or -1.
+func (app App) navIndex(state AppState) int {
+	for i, e := range app.navStack {
+		if e.state == state {
+			return i
+		}
+	}
+	return -1
+}
+
 func (app App) goBack() App {
 	app.stopLogs()
 	app.stopDmesg()
 	app.stopHealth()
 	app.searchActive = false
 	app.searchInput.Reset()
-	switch app.state {
-	case StateLogs:
-		switch app.logOrigin {
-		case StateServices, StateLogStreams:
-			app.state = app.logOrigin
-		default:
-			app.state = StateServices
-		}
-	case StateLogStreams:
-		app.state = StateNodeList
-		app.selNode = nil
-	case StateServices:
-		app.state = StateNodeList
-		app.selNode = nil
-	case StateExtCatalog:
-		app.state = app.prev
-	case StateHelp:
-		app.state = app.prev
-	default:
+	app.listScroll = 0
+	app.viewScrollStart = 0
+	if n := len(app.navStack); n > 0 {
+		e := app.navStack[n-1]
+		app.navStack = app.navStack[:n-1]
+		app.state = e.state
+		app.selNode = e.node
+	} else {
 		app.state = StateNodeList
 		app.selNode = nil
 	}
+	// The node list is always cluster-scoped; a stale selNode only mis-labels
+	// the header.
+	if app.state == StateNodeList {
+		app.selNode = nil
+	}
 	return app
+}
+
+// crumbs flattens the nav stack (plus the current view) into breadcrumb labels.
+// navTop is the state goBack would return to, or StateNodeList when the
+// stack is empty.
+func (app App) navTop() AppState {
+	if n := len(app.navStack); n > 0 {
+		return app.navStack[n-1].state
+	}
+	return StateNodeList
+}
+
+func (app App) crumbs() []string {
+	out := make([]string, 0, len(app.navStack)+1)
+	for _, e := range app.navStack {
+		out = append(out, crumbLabel(e.state))
+	}
+	out = append(out, crumbLabel(app.state))
+	return out
 }
 
 func (app App) selectedNode() *talos.Node {

@@ -41,8 +41,8 @@ func TestApp_NodeLogStreamsKey_entersPickerForFilteredSelectedNode(t *testing.T)
 	got := model.(App)
 
 	// Then
-	if got.state != StateLogStreams || got.prev != StateNodeList {
-		t.Fatalf("state = %v, prev = %v; want LogStreams from NodeList", got.state, got.prev)
+	if got.state != StateLogStreams || got.navTop() != StateNodeList {
+		t.Fatalf("state = %v, back = %v; want LogStreams from NodeList", got.state, got.navTop())
 	}
 	if got.selNode == nil || got.selNode.Hostname != "talos-node-01.example.internal" {
 		t.Fatalf("selected node = %#v, want filtered node 01", got.selNode)
@@ -183,7 +183,7 @@ func TestApp_LogStreamsLoaded_appliesActiveReplyWhilePickerOverlayIsOpen(t *test
 			// Given
 			app := App{
 				state:                overlay,
-				prev:                 StateLogStreams,
+				navStack:             []navEntry{{state: StateLogStreams, node: &node}},
 				selNode:              &node,
 				logStreamLoading:     true,
 				logStreamRequestNode: node.IP,

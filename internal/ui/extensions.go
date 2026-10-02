@@ -9,22 +9,13 @@ import (
 )
 
 func (app App) handleExtensionsKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.extCur, len(app.filteredExtensions()), app.mainHeight()-3) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
-
-	case "up", "k":
-		if app.extCur > 0 {
-			app.extCur--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.extCur, len(app.filteredExtensions()), app.mainHeight()-3)
-		}
-
-	case "down", "j":
-		if app.extCur < len(app.filteredExtensions())-1 {
-			app.extCur++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.extCur, len(app.filteredExtensions()), app.mainHeight()-3)
-		}
 
 	case "C":
 		if app.selNode != nil {
@@ -48,7 +39,7 @@ func (app App) renderExtensions(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Extensions on %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Extensions", len(app.extensions), 0, node)
 
 	if app.extLoading && len(app.extensions) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,

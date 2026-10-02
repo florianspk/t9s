@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,20 +9,13 @@ import (
 )
 
 func (app App) handleProcessesKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.listScroll, len(app.processes), app.mainHeight()-3) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
-	case "up", "k":
-		if app.listScroll > 0 {
-			app.listScroll--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.processes), app.mainHeight()-3)
-		}
-	case "down", "j":
-		if app.listScroll < len(app.processes)-1 {
-			app.listScroll++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.listScroll, len(app.processes), app.mainHeight()-3)
-		}
 	case "r":
 		if app.selNode != nil {
 			app.procLoading = true
@@ -41,7 +33,7 @@ func (app App) renderProcesses(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Processes on %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Processes", len(app.processes), 0, node)
 
 	if app.procLoading && len(app.processes) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,

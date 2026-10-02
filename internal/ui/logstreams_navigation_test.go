@@ -75,8 +75,8 @@ func TestApp_LogStreamsEnter_startsSelectedTargetWithoutRunningCommand(t *testin
 	got, cmd := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Then
-	if got.state != StateLogs || got.prev != StateLogStreams || got.logOrigin != StateLogStreams || got.logService != "kubelet" {
-		t.Fatalf("state = %v, prev = %v, origin = %v, target = %q", got.state, got.prev, got.logOrigin, got.logService)
+	if got.state != StateLogs || got.navTop() != StateLogStreams || got.logService != "kubelet" {
+		t.Fatalf("state = %v, back = %v, target = %q", got.state, got.navTop(), got.logService)
 	}
 	if !got.logStreaming || got.logCh == nil || got.logCtx == nil || got.logCancel == nil {
 		t.Fatal("log stream resources were not initialized")
@@ -131,8 +131,8 @@ func TestApp_ServicesEnter_stillStartsServiceLogsWithoutRunningCommand(t *testin
 	got, cmd := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Then
-	if got.state != StateLogs || got.prev != StateServices || got.logOrigin != StateServices || got.logService != "etcd" {
-		t.Fatalf("state = %v, prev = %v, origin = %v, service = %q", got.state, got.prev, got.logOrigin, got.logService)
+	if got.state != StateLogs || got.navTop() != StateServices || got.logService != "etcd" {
+		t.Fatalf("state = %v, back = %v, service = %q", got.state, got.navTop(), got.logService)
 	}
 	if !got.logStreaming || cmd == nil {
 		t.Fatal("service log behavior did not initialize streaming")
@@ -154,7 +154,7 @@ func TestApp_LogsBack_returnsToItsServiceOrStreamSource(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// Given
-			app := App{state: StateLogs, prev: StateHelp, logOrigin: test.prev, selNode: &node, searchInput: textinput.New()}
+			app := App{state: StateLogs, navStack: []navEntry{{state: StateNodeList}, {state: test.prev, node: &node}}, selNode: &node, searchInput: textinput.New()}
 
 			// When
 			got, cmd := app.handleLogsKey(tea.KeyMsg{Type: tea.KeyEsc})
@@ -221,7 +221,7 @@ func TestApp_LogsBack_returnsToOriginAfterOverlayRoundTrip(t *testing.T) {
 func TestApp_LogStreamsBack_returnsToNodeListAndClearsSelection(t *testing.T) {
 	// Given
 	node := talos.Node{Hostname: "node-a", IP: "10.0.0.2"}
-	app := App{state: StateLogStreams, prev: StateNodeList, selNode: &node, searchInput: textinput.New()}
+	app := App{state: StateLogStreams, navStack: []navEntry{{state: StateNodeList}}, selNode: &node, searchInput: textinput.New()}
 
 	// When
 	got, cmd := app.handleLogStreamsKey(tea.KeyMsg{Type: tea.KeyEsc})

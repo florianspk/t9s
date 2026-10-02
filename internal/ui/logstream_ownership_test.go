@@ -24,7 +24,7 @@ func TestApp_LogStreamsLoaded_ignoresMatchingReplyWithoutPickerOwnership(t *test
 			// Given
 			app := App{
 				state:                test.state,
-				prev:                 test.prev,
+				navStack:             []navEntry{{state: test.prev}},
 				selNode:              &node,
 				logStreams:           []string{"current"},
 				logStreamCur:         3,

@@ -103,7 +103,6 @@ func waitForLine(ch <-chan string, sessionSeq uint64) tea.Cmd {
 func (app App) startLogStream(target string) (App, tea.Cmd) {
 	app.stopLogs()
 	app.logSessionSeq++
-	app.logOrigin = app.state
 	app.logService = target
 	app.logLines = nil
 	app.logCur = 0
