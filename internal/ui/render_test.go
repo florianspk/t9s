@@ -528,3 +528,186 @@ func TestRenderServicesNoLineExceedsWidth(t *testing.T) {
 		})
 	}
 }
+
+// ── LVM view ─────────────────────────────────────────────────────────────────
+
+func makeLVM() ([]talos.LVMPhysicalVolume, []talos.LVMVolumeGroup, []talos.LVMLogicalVolume) {
+	pvs := []talos.LVMPhysicalVolume{
+		{Device: "/dev/sdb1", VolumeGroup: "vg0", Size: "40 GiB", Free: "12 GiB"},
+		{Device: "/dev/sdc", VolumeGroup: "vg0", Size: "40 GiB", Free: "40 GiB"},
+	}
+	vgs := []talos.LVMVolumeGroup{{Name: "vg0", Size: "80 GiB", Free: "52 GiB", PVs: "2", LVs: "2"}}
+	lvs := []talos.LVMLogicalVolume{
+		{Name: "vg0/data", VolumeGroup: "vg0", Layout: "linear", Size: "20 GiB", Active: "active"},
+		{Name: "vg0/cache", VolumeGroup: "vg0", Layout: "raid1", Size: "8 GiB", Active: "false"},
+	}
+	return pvs, vgs, lvs
+}
+
+func TestRenderLVMHeightBudget(t *testing.T) {
+	for _, h := range []int{8, 15, 30} {
+		app := newTestApp(120, h+6)
+		app.selNode = &talos.Node{Hostname: "n1", IP: "10.0.0.1"}
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs = makeLVM()
+		out := app.renderLVM(h)
+		if got := lineCount(out); got > h {
+			t.Errorf("h=%d: %d lines > budget\n%s", h, got, out)
+		}
+	}
+}
+
+func TestRenderLVMEmpty(t *testing.T) {
+	app := newTestApp(120, 30)
+	app.selNode = &talos.Node{Hostname: "n1"}
+	out := app.renderLVM(24)
+	if !strings.Contains(out, "No LVM volumes") {
+		t.Errorf("expected empty-state message, got:\n%s", out)
+	}
+}
+
+func TestRenderResourceBrowserHeightBudget(t *testing.T) {
+	lines := makeLines(60)
+	for _, h := range []int{10, 20, 40} {
+		app := newTestApp(100, h+6)
+		app.browser.kind = "mounts"
+		app.browser.lines = lines
+		out := app.renderResourceBrowser(h)
+		if got := lineCount(out); got > h {
+			t.Errorf("h=%d: %d lines > budget", h, got)
+		}
+	}
+}
+
+// ── disks view with LVM section ──────────────────────────────────────────────
+
+func TestRenderDisksWithLVMWithinWidthAndHeight(t *testing.T) {
+	for _, width := range []int{80, 120, 200} {
+		app := newTestApp(width, 30)
+		app.disks = makeDisks()
+		app.disks[1].Dev = "/dev/sdb"
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs = makeLVM()
+		app.lvm.pvs[0].Device = "/dev/sdb1"
+		out := app.renderDisks(24)
+		if got := maxLineWidth(out); got > width {
+			t.Errorf("w=%d: line %d chars\n%s", width, got, out)
+		}
+		if got := lineCount(out); got > 24 {
+			t.Errorf("w=%d: %d lines > 24", width, got)
+		}
+	}
+}
+
+func TestRenderLVMShowsConfigAndErrors(t *testing.T) {
+	app := newTestApp(140, 40)
+	app.selNode = &talos.Node{Hostname: "n1", IP: "10.0.0.1"}
+	app.lvm.pvs, app.lvm.vgs, app.lvm.lvs = makeLVM()
+	app.lvm.vgCfgs = []talos.LVMVolumeGroupConfig{
+		{Name: "vg0", PhysicalVolumes: []string{"/dev/sdb", "/dev/sdc"}},
+	}
+	app.lvm.lvCfgs = []talos.LVMLogicalVolumeConfig{
+		{Name: "app", VolumeGroup: "vg0", Type: "raid1", Size: "80%", Mirrors: 2},
+	}
+	app.lvm.errors = []talos.LVMValidationError{
+		{VolumeGroup: "vg0", Message: "disk /dev/sdb claimed twice"},
+	}
+
+	out := app.renderLVM(34)
+	for _, want := range []string{"VALIDATION ERRORS", "claimed twice", "CONFIG", "/dev/sdb", "raid1", "80%"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if got := lineCount(out); got > 34 {
+		t.Errorf("%d lines > budget 34", got)
+	}
+}
+
+func TestVisibleDisksHidesLVDeviceMapperNodes(t *testing.T) {
+	app := newTestApp(120, 30)
+	app.disks = append(makeDisks(), talos.DiskInfo{Dev: "/dev/dm-0", Type: "dm", Size: "107.4 GB"})
+
+	if got := len(app.visibleDisks()); got != 4 {
+		t.Fatalf("without LVM data dm-0 must stay, got %d disks", got)
+	}
+
+	app.lvm.lvs = []talos.LVMLogicalVolume{
+		{Name: "vg0/data", VolumeGroup: "vg0", Size: "107 GB", DMDevice: "dm-0"},
+	}
+	got := app.visibleDisks()
+	if len(got) != 3 {
+		t.Fatalf("dm-0 should be hidden, got %d disks", len(got))
+	}
+	for _, d := range got {
+		if strings.Contains(d.Dev, "dm-0") {
+			t.Errorf("dm-0 still listed: %+v", got)
+		}
+	}
+}
+
+func TestHintRowsPackTightly(t *testing.T) {
+	app := newTestApp(160, 40) // node list: 6 short hints
+	rows := app.hintRows()
+	if len(rows) != 1 {
+		t.Errorf("6 hints should fit on one line at w=160, got %d rows: %v", len(rows), rows)
+	}
+	if got := app.hintsHeight(); got != len(rows) {
+		t.Errorf("hintsHeight()=%d disagrees with hintRows()=%d", got, len(rows))
+	}
+
+	// Narrow terminals wrap, but never past the 3-row cap and never wider
+	// than the terminal.
+	for _, w := range []int{40, 60, 80, 100, 200} {
+		app := newTestApp(w, 40)
+		rows := app.hintRows()
+		if len(rows) > 3 {
+			t.Errorf("w=%d: %d rows exceeds the cap", w, len(rows))
+		}
+		if got := maxLineWidth(app.renderHintsPanel()); got > w {
+			t.Errorf("w=%d: hint line is %d wide", w, got)
+		}
+		if app.hintsHeight() != len(rows) {
+			t.Errorf("w=%d: hintsHeight disagrees with hintRows", w)
+		}
+	}
+}
+
+func TestScrollCursor(t *testing.T) {
+	app := newTestApp(120, 30)
+	cur := 0
+	const n, rows = 50, 10
+
+	for _, tc := range []struct {
+		key  string
+		want int
+	}{
+		{"down", 1}, {"j", 2}, {"up", 1}, {"k", 0},
+		{"up", 0},       // clamps at the top
+		{"G", n - 1},    // bottom
+		{"down", n - 1}, // clamps at the bottom
+		{"g", 0},        // top
+		{"pgdown", rows / 2},
+		{"pgup", 0},
+	} {
+		if !app.scrollCursor(tc.key, &cur, n, rows) {
+			t.Fatalf("%q should be handled", tc.key)
+		}
+		if cur != tc.want {
+			t.Errorf("after %q: cur=%d, want %d", tc.key, cur, tc.want)
+		}
+	}
+
+	if app.scrollCursor("enter", &cur, n, rows) {
+		t.Error("non-scrolling keys must fall through")
+	}
+
+	// The window always keeps the cursor visible.
+	for _, c := range []int{0, 7, 25, n - 1} {
+		cur = c
+		app.scrollCursor("g", &cur, n, rows)
+		cur = c
+		app.scrollCursor("down", &cur, n, rows)
+		if cur < app.viewScrollStart || cur >= app.viewScrollStart+rows {
+			t.Errorf("cursor %d outside window [%d,%d)", cur, app.viewScrollStart, app.viewScrollStart+rows)
+		}
+	}
+}

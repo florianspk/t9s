@@ -31,7 +31,7 @@ func (app App) renderMetrics(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Container Metrics: %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Metrics", len(app.stats), 0, node)
 
 	if app.statsLoading && len(app.stats) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,

@@ -9,22 +9,13 @@ import (
 )
 
 func (app App) handleExtCatalogKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.catalogCur, len(app.filteredCatalog()), app.mainHeight()-4) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
-
-	case "up", "k":
-		if app.catalogCur > 0 {
-			app.catalogCur--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.catalogCur, len(app.filteredCatalog()), app.mainHeight()-4)
-		}
-
-	case "down", "j":
-		if app.catalogCur < len(app.filteredCatalog())-1 {
-			app.catalogCur++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.catalogCur, len(app.filteredCatalog()), app.mainHeight()-4)
-		}
 
 	case "esc", "q":
 		app = app.goBack()

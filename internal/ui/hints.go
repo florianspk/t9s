@@ -2,11 +2,20 @@ package ui
 
 import (
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type hint struct {
 	key  string
 	desc string
+}
+
+func yamlHint(app App) string {
+	if app.browser.yaml {
+		return "Table"
+	}
+	return "All YAML"
 }
 
 func wrapHint(app App) string {
@@ -25,7 +34,8 @@ func stateHints(app App) []hint {
 			{"↑↓", "Navigate"},
 			{"↵/s", "Services"},
 			{"l", "Log streams"},
-			{"e", "Extensions"},
+			{"i", "Disks"},
+			{":", "Command"},
 			{"?", "All shortcuts"},
 			{"q", "Quit"},
 		}
@@ -83,6 +93,32 @@ func stateHints(app App) []hint {
 	case StateDisks:
 		return []hint{
 			{"↑↓", "Navigate"},
+			{":lvm", "LVM view"},
+			{"r", "Refresh"},
+			{"Esc/q", "Back"},
+		}
+	case StateLVM:
+		return []hint{
+			{"↑↓", "Scroll"},
+			{"g/G", "Top/Bottom"},
+			{"c", "Config"},
+			{"r", "Refresh"},
+			{"Esc/q", "Back"},
+		}
+	case StateResourceBrowser:
+		if app.detailOpen() {
+			return []hint{
+				{"↑↓", "Scroll"},
+				{"g/G", "Top/Bottom"},
+				{"r", "Refresh"},
+				{"Esc/q", "Back to list"},
+			}
+		}
+		return []hint{
+			{"↑↓", "Scroll"},
+			{"↵", "Show YAML"},
+			{"y", yamlHint(app)},
+			{"g/G", "Top/Bottom"},
 			{"r", "Refresh"},
 			{"Esc/q", "Back"},
 		}
@@ -119,9 +155,6 @@ func stateHints(app App) []hint {
 		if app.upgradeConfirm {
 			return []hint{{"y", "Confirm"}, {"n/Esc", "Cancel"}}
 		}
-		if app.state == StateUpgradeTalos {
-			return []hint{{"↵", "Confirm"}, {"p", "--preserve"}, {"Esc/q", "Back"}}
-		}
 		return []hint{{"↵", "Confirm"}, {"Esc/q", "Back"}}
 	case StateContextSwitcher:
 		return []hint{
@@ -133,57 +166,64 @@ func stateHints(app App) []hint {
 	return nil
 }
 
-func (app App) renderHintsPanel() string {
+// hintRows packs the hint entries into as few lines as the terminal allows.
+// renderHintsPanel and hintsHeight must agree, so both go through here.
+func (app App) hintRows() [][]string {
 	hints := stateHints(app)
 	if len(hints) == 0 {
+		return nil
+	}
+
+	const (
+		indent = 2
+		gutter = 3
+	)
+	avail := app.width - indent
+	if avail < 20 {
+		avail = 20
+	}
+
+	var (
+		rows [][]string
+		cur  []string
+		used int
+	)
+	for _, h := range hints {
+		e := keyStyle.Render("<"+h.key+">") + " " + dimStyle.Render(h.desc)
+		w := lipgloss.Width(e)
+		need := w
+		if len(cur) > 0 {
+			need += gutter
+		}
+		if len(cur) > 0 && used+need > avail {
+			rows = append(rows, cur)
+			cur, used = nil, 0
+			need = w
+		}
+		cur = append(cur, e)
+		used += need
+	}
+	if len(cur) > 0 {
+		rows = append(rows, cur)
+	}
+	if len(rows) > 3 {
+		rows = rows[:3]
+	}
+	return rows
+}
+
+func (app App) renderHintsPanel() string {
+	rows := app.hintRows()
+	if len(rows) == 0 {
 		return ""
 	}
-
-	w := app.width
-	if w < 40 {
-		w = 40
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = "  " + strings.Join(r, "   ")
 	}
-	numCols := max(2, min(5, w/20))
-	colW := w / numCols
-
-	numRows := (len(hints) + numCols - 1) / numCols
-	if numRows > 3 {
-		numRows = 3
-	}
-
-	var rows []string
-	for row := 0; row < numRows; row++ {
-		var sb strings.Builder
-		sb.WriteString("  ")
-		for col := 0; col < numCols; col++ {
-			idx := row*numCols + col
-			if idx < len(hints) {
-				h := hints[idx]
-				entry := keyStyle.Render("<"+h.key+">") + " " + dimStyle.Render(h.desc)
-				if col < numCols-1 {
-					entry = padRight(entry, colW-2)
-				}
-				sb.WriteString(entry)
-			}
-		}
-		rows = append(rows, sb.String())
-	}
-	return strings.Join(rows, "\n")
+	return strings.Join(out, "\n")
 }
 
 func (app App) hintsHeight() int {
-	hints := stateHints(app)
-	if len(hints) == 0 {
-		return 0
-	}
-	w := app.width
-	if w < 40 {
-		w = 40
-	}
-	numCols := max(2, min(5, w/20))
-	rows := (len(hints) + numCols - 1) / numCols
-	if rows > 3 {
-		rows = 3
-	}
-	return rows
+	return len(app.hintRows())
 }

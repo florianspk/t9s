@@ -1,11 +1,33 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// startDmesg (re)starts the dmesg stream for app.selNode and switches to the view.
+// Caller must have set app.selNode.
+func startDmesg(app App) (App, tea.Cmd) {
+	app.stopDmesg()
+	app.dmesgLines = nil
+	app.dmesgCur = 0
+	app.dmesgStreaming = true
+	app = app.goTo(StateDmesg)
+	app.dmesgCh = make(chan string, 500)
+	app.dmesgCtx, app.dmesgCancel = context.WithCancel(context.Background())
+	client := app.client
+	node := app.selNode.IP
+	ch := app.dmesgCh
+	ctx := app.dmesgCtx
+	go func() {
+		defer close(ch)
+		client.StreamDmesg(ctx, node, ch)
+	}()
+	return app, waitForDmesgLine(app.dmesgCh)
+}
 
 func waitForDmesgLine(ch <-chan string) tea.Cmd {
 	return func() tea.Msg {

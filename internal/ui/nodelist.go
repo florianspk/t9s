@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -9,22 +8,13 @@ import (
 )
 
 func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.nodeCur, len(app.filteredNodes()), app.mainHeight()-2) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c", "q":
 		app.cleanup()
 		return app, tea.Quit
-
-	case "up", "k":
-		if app.nodeCur > 0 {
-			app.nodeCur--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.nodeCur, len(app.filteredNodes()), app.mainHeight()-2)
-		}
-
-	case "down", "j":
-		if app.nodeCur < len(app.filteredNodes())-1 {
-			app.nodeCur++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.nodeCur, len(app.filteredNodes()), app.mainHeight()-2)
-		}
 
 	case "enter", "s":
 		n := app.selectedNode()
@@ -94,21 +84,7 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 			return app, nil
 		}
 		app.selNode = n
-		app.dmesgLines = nil
-		app.dmesgCur = 0
-		app.dmesgStreaming = true
-		app = app.goTo(StateDmesg)
-		app.dmesgCh = make(chan string, 500)
-		app.dmesgCtx, app.dmesgCancel = context.WithCancel(context.Background())
-		client := app.client
-		node := app.selNode.IP
-		dmesgCh := app.dmesgCh
-		dmesgCtx := app.dmesgCtx
-		go func() {
-			defer close(dmesgCh)
-			client.StreamDmesg(dmesgCtx, node, dmesgCh)
-		}()
-		return app, waitForDmesgLine(app.dmesgCh)
+		return startDmesg(app)
 
 	case "t":
 		n := app.selectedNode()
@@ -129,7 +105,6 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		}
 		app.selNode = n
 		app.upgradeForK8s = false
-		app.upgradePreserve = true // default on: required for single-node etcd clusters
 		app.upgradeConfirm = false
 		app.upgradeRunning = false
 		app.upgradeLines = nil
@@ -211,7 +186,8 @@ func (app App) handleNodeListKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app.diskLoading = true
 		app = app.goTo(StateDisks)
 		app.volumes = nil
-		return app, tea.Batch(app.loadDisks(), app.loadVolumes())
+		app.lvm.pvs, app.lvm.vgs, app.lvm.lvs, app.lvm.err = nil, nil, nil, nil
+		return app, tea.Batch(app.loadDisks(), app.loadVolumes(), app.loadLVM())
 
 	case "H":
 		app.selNode = app.selectedNode()

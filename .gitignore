@@ -29,3 +29,9 @@ kubeconfig
 # OS
 .DS_Store
 Thumbs.db
+
+# makepkg build output (packaging/aur)
+packaging/aur/src/
+packaging/aur/pkg/
+packaging/aur/*.tar.gz
+packaging/aur/*.pkg.tar.*

@@ -438,3 +438,42 @@ func TestExtractSpecContentNoSpec(t *testing.T) {
 		t.Error("no spec key: must return raw content unchanged")
 	}
 }
+
+// A Talos machine config is multi-document: v1alpha1 plus HostnameConfig,
+// LVMVolumeGroupConfig and friends. Dropping documents after the first would
+// delete those settings the next time the config is applied.
+func TestExtractSpecContentKeepsAllDocuments(t *testing.T) {
+	raw := "node: 10.0.0.1\n" +
+		"metadata:\n    id: v1alpha1\n" +
+		"spec: |\n" +
+		"    version: v1alpha1\n" +
+		"    machine:\n" +
+		"        type: worker\n" +
+		"    ---\n" +
+		"    apiVersion: v1alpha1\n" +
+		"    kind: LVMVolumeGroupConfig\n" +
+		"    name: data-vg\n" +
+		"    provisioning:\n" +
+		"        volumeSelector:\n" +
+		"            match: disk.dev_path == \"/dev/sdb\"\n"
+
+	got := extractSpecContent(raw)
+	for _, want := range []string{"version: v1alpha1", "LVMVolumeGroupConfig", "data-vg", "/dev/sdb"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in extracted config:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "---") != 1 {
+		t.Errorf("expected one document separator, got:\n%s", got)
+	}
+}
+
+func TestRemarshalYAMLDocsSingleDocument(t *testing.T) {
+	got, err := remarshalYAMLDocs("a: 1\nb: 2\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "---") {
+		t.Errorf("single doc must not gain a separator: %q", got)
+	}
+}

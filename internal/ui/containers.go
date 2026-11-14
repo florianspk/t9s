@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,20 +11,13 @@ import (
 )
 
 func (app App) handleContainersKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.contCur, len(app.containers), app.mainHeight()-3) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
-	case "up", "k":
-		if app.contCur > 0 {
-			app.contCur--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.contCur, len(app.containers), app.mainHeight()-3)
-		}
-	case "down", "j":
-		if app.contCur < len(app.containers)-1 {
-			app.contCur++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.contCur, len(app.containers), app.mainHeight()-3)
-		}
 	case "r":
 		if app.selNode != nil {
 			app.contLoading = true
@@ -53,7 +45,7 @@ func (app App) renderContainers(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Containers on %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Containers", len(app.containers), 0, node)
 
 	if app.contLoading && len(app.containers) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,

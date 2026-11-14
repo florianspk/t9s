@@ -67,10 +67,6 @@ func (app App) handleUpgradeKey(msg tea.KeyMsg) (App, tea.Cmd) {
 		app = app.goBack()
 		return app, nil
 
-	case "p":
-		app.upgradePreserve = !app.upgradePreserve
-		return app, nil
-
 	case "enter":
 		if strings.TrimSpace(app.upgradeInput.Value()) == "" {
 			app.statusMsg = warnStyle.Render("Please enter a value")
@@ -101,7 +97,6 @@ func (app App) startUpgrade() (App, tea.Cmd) {
 		node = app.selNode.IP
 	}
 	forK8s := app.upgradeForK8s
-	preserve := app.upgradePreserve
 
 	upgradeCh := app.upgradeCh
 	upgradeCtx := app.upgradeCtx
@@ -111,7 +106,7 @@ func (app App) startUpgrade() (App, tea.Cmd) {
 		if forK8s {
 			err = client.UpgradeK8s(upgradeCtx, val, upgradeCh)
 		} else {
-			err = client.UpgradeTalos(upgradeCtx, node, val, preserve, upgradeCh)
+			err = client.UpgradeTalos(upgradeCtx, node, val, upgradeCh)
 		}
 		if err != nil && upgradeCtx.Err() == nil {
 			upgradeCh <- fmt.Sprintf("ERROR: %v", err)
@@ -146,14 +141,9 @@ func (app App) renderUpgrade(height int) string {
 		if isK8s {
 			msg = fmt.Sprintf("Upgrade Kubernetes to %s?", okStyle.Render(val))
 		} else {
-			preserveNote := dimStyle.Render("--preserve=false")
-			if app.upgradePreserve {
-				preserveNote = okStyle.Render("--preserve=true")
-			}
-			msg = fmt.Sprintf("Upgrade Talos on %s to image %s  %s",
+			msg = fmt.Sprintf("Upgrade Talos on %s to image %s",
 				titleStyle.Render(app.selNode.Hostname),
-				okStyle.Render(val),
-				preserveNote)
+				okStyle.Render(val))
 		}
 		confirm := fmt.Sprintf("\n  %s\n\n  %s  %s",
 			msg,
@@ -175,22 +165,9 @@ func (app App) renderUpgrade(height int) string {
 	if isK8s {
 		label = "Target Kubernetes version (e.g. 1.29.0):"
 	}
-	preserveLine := ""
-	if !isK8s {
-		preserveVal := dimStyle.Render("off")
-		if app.upgradePreserve {
-			preserveVal = okStyle.Render("on")
-		}
-		preserveLine = fmt.Sprintf("\n  %s --preserve %s  %s\n",
-			keyStyle.Render("[p]"),
-			preserveVal,
-			dimStyle.Render("(required for single-node etcd clusters)"),
-		)
-	}
-	inputView := fmt.Sprintf("\n  %s\n\n  %s\n%s",
+	inputView := fmt.Sprintf("\n  %s\n\n  %s\n",
 		dimStyle.Render(label),
 		app.upgradeInput.View(),
-		preserveLine,
 	)
 	return title + lipgloss.Place(app.width, height-2, lipgloss.Left, lipgloss.Center, inputView)
 }

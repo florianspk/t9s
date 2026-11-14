@@ -54,6 +54,15 @@ brew tap florianspk/tap
 brew install --cask t9s
 ```
 
+### Arch Linux
+
+PKGBUILDs live in [`packaging/aur/`](packaging/aur) — `PKGBUILD` builds a tagged
+release, `PKGBUILD-git` builds the git tip.
+
+```bash
+cd packaging/aur && makepkg -si
+```
+
 ### Packages & binaries
 
 Download from the [GitHub Releases](https://github.com/florianspk/t9s/releases) page:

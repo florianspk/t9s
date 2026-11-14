@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -9,22 +8,13 @@ import (
 )
 
 func (app App) handleServicesKey(msg tea.KeyMsg) (App, tea.Cmd) {
+	if app.scrollCursor(msg.String(), &app.svcCur, len(app.filteredServices()), app.mainHeight()-3) {
+		return app, nil
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		app.cleanup()
 		return app, tea.Quit
-
-	case "up", "k":
-		if app.svcCur > 0 {
-			app.svcCur--
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.svcCur, len(app.filteredServices()), app.mainHeight()-3)
-		}
-
-	case "down", "j":
-		if app.svcCur < len(app.filteredServices())-1 {
-			app.svcCur++
-			app.viewScrollStart = clampScrollStart(app.viewScrollStart, app.svcCur, len(app.filteredServices()), app.mainHeight()-3)
-		}
 
 	case "enter", "l":
 		svcs := app.filteredServices()
@@ -44,7 +34,7 @@ func (app App) renderServices(height int) string {
 	if app.selNode != nil {
 		node = app.selNode.Hostname
 	}
-	title := fmt.Sprintf("  Services on %s\n", titleStyle.Render(node))
+	title := renderTitleBar("Services", len(app.services), 0, node)
 
 	if app.svcLoading && len(app.services) == 0 {
 		return title + lipgloss.Place(app.width, height-2, lipgloss.Center, lipgloss.Center,
